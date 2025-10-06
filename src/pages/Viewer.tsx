@@ -19,6 +19,12 @@ interface Project {
 }
 
 const Viewer = () => {
+  // Target project to prioritize
+  const TARGET_PROJECT_ID = "98278c51-84f5-4955-90c3-cfd337c8b225";
+  
+  // Hardcoded trial model URL
+  const TRIAL_MODEL_URL = "https://acc.autodesk.com/docs/files/projects/98278c51-84f5-4955-90c3-cfd337c8b225?folderUrn=urn%3Aadsk.wipprod%3Afs.folder%3Aco.zr0cAH1lWP6TBbnZTaeKEg&entityId=urn%3Aadsk.wipprod%3Adm.lineage%3ArLnYQtQ0WwiOvtivbGdMpQ&viewModel=detail&moduleId=folders&viewableGuid=f45222b7-9a71-d2d4-9674-a73d51f2c767";
+  
   const viewerRef = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<any>(null);
   const [showFileBrowser, setShowFileBrowser] = useState(true);
@@ -26,10 +32,7 @@ const Viewer = () => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
-  const [manualProjectId, setManualProjectId] = useState("");
-  
-  // Target project to prioritize
-  const TARGET_PROJECT_ID = "98278c51-84f5-4955-90c3-cfd337c8b225";
+  const [manualProjectId, setManualProjectId] = useState(TRIAL_MODEL_URL);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -108,8 +111,8 @@ const Viewer = () => {
       );
       
       if (targetProject) {
-        console.log('Auto-loading target project:', targetProject.attributes.name);
-        setTimeout(() => loadModel(targetProject.id), 1000);
+        console.log('Auto-loading trial model:', targetProject.attributes.name);
+        setTimeout(() => loadModel(TRIAL_MODEL_URL), 1000);
       }
     } catch (error) {
       console.error('Error fetching projects:', error);
