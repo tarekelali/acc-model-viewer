@@ -82,27 +82,11 @@ const Viewer = () => {
     }
   };
 
-  const handleLogin = async () => {
+  const handleLogin = () => {
     const authUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autodesk-auth`;
     console.log('Redirecting to auth URL:', authUrl);
-    
-    try {
-      // First call the function to get the redirect URL
-      const response = await fetch(authUrl);
-      console.log('Auth response:', response);
-      
-      // If it's a redirect, follow it
-      if (response.redirected) {
-        console.log('Following redirect to:', response.url);
-        window.location.href = response.url;
-      } else {
-        console.error('No redirect received');
-        toast.error('Authentication setup error - check console');
-      }
-    } catch (error) {
-      console.error('Auth error:', error);
-      toast.error(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    // Direct redirect for OAuth flow - don't use fetch()
+    window.location.href = authUrl;
   };
 
   // Initialize viewer
