@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers } from "lucide-react";
+import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 declare global {
   interface Window {
@@ -9,24 +11,83 @@ declare global {
   }
 }
 
+interface Project {
+  id: string;
+  attributes: {
+    name: string;
+  };
+}
+
 const Viewer = () => {
   const viewerRef = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<any>(null);
   const [showFileBrowser, setShowFileBrowser] = useState(true);
+  const [searchParams] = useSearchParams();
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(false);
 
+  // Check for auth callback
   useEffect(() => {
-    if (!viewerRef.current || !window.Autodesk) {
-      toast.error("Autodesk Viewer SDK not loaded");
-      return;
+    const token = searchParams.get('token');
+    if (token) {
+      setAccessToken(token);
+      localStorage.setItem('autodesk_token', token);
+      toast.success("Authentication successful");
+    } else {
+      const savedToken = localStorage.getItem('autodesk_token');
+      if (savedToken) {
+        setAccessToken(savedToken);
+      }
     }
+  }, [searchParams]);
+
+  // Fetch projects when authenticated
+  useEffect(() => {
+    if (accessToken) {
+      fetchProjects();
+    }
+  }, [accessToken]);
+
+  const fetchProjects = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('autodesk-projects', {
+        body: { token: accessToken },
+      });
+
+      if (error) throw error;
+      
+      setProjects(data.data || []);
+      toast.success(`Loaded ${data.data?.length || 0} projects`);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      toast.error("Failed to load projects");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = () => {
+    const authUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autodesk-auth`;
+    window.location.href = authUrl;
+  };
+
+  // Initialize viewer
+  useEffect(() => {
+    if (!viewerRef.current || !window.Autodesk || !accessToken) return;
 
     const options = {
       env: "AutodeskProduction",
       api: "derivativeV2",
-      getAccessToken: (callback: (token: string, expires: number) => void) => {
-        // This will need to call your backend to get a token
-        // For now, using a placeholder
-        callback("YOUR_ACCESS_TOKEN", 3600);
+      getAccessToken: async (callback: (token: string, expires: number) => void) => {
+        try {
+          const { data } = await supabase.functions.invoke('autodesk-viewer-token');
+          callback(data.access_token, data.expires_in);
+        } catch (error) {
+          console.error('Token error:', error);
+          toast.error("Failed to get viewer token");
+        }
       },
     };
 
@@ -36,7 +97,7 @@ const Viewer = () => {
         const viewer3D = new window.Autodesk.Viewing.GuiViewer3D(viewerDiv);
         viewer3D.start();
         setViewer(viewer3D);
-        toast.success("Viewer initialized successfully");
+        toast.success("Viewer initialized");
       }
     });
 
@@ -45,7 +106,35 @@ const Viewer = () => {
         viewer.finish();
       }
     };
-  }, []);
+  }, [accessToken]);
+
+  const loadModel = async (projectId: string) => {
+    if (!viewer) {
+      toast.error("Viewer not initialized");
+      return;
+    }
+
+    try {
+      // For demo: Load a sample URN - you'll need to implement file browsing
+      const documentId = 'urn:dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnJMbllRdFEwV1dpT3Z0aXZiR2RNcFE_dmVyc2lvbj0x';
+      
+      window.Autodesk.Viewing.Document.load(
+        documentId,
+        (doc: any) => {
+          const defaultModel = doc.getRoot().getDefaultGeometry();
+          viewer.loadDocumentNode(doc, defaultModel);
+          toast.success("Model loaded");
+        },
+        (error: any) => {
+          console.error('Model load error:', error);
+          toast.error("Failed to load model");
+        }
+      );
+    } catch (error) {
+      console.error('Load error:', error);
+      toast.error("Error loading model");
+    }
+  };
 
   const handleZoomIn = () => {
     if (viewer) {
@@ -75,13 +164,29 @@ const Viewer = () => {
         } overflow-hidden border-r border-border bg-card`}
       >
         <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">Projects</h2>
+          <h2 className="text-lg font-semibold text-foreground">ACC Projects</h2>
         </div>
         <div className="p-4 space-y-2">
-          <div className="p-3 rounded-lg bg-secondary hover:bg-secondary/80 cursor-pointer transition-colors">
-            <p className="text-sm font-medium text-foreground">Sample Project</p>
-            <p className="text-xs text-muted-foreground">3 models available</p>
-          </div>
+          {!accessToken ? (
+            <Button onClick={handleLogin} className="w-full" size="sm">
+              <LogIn className="h-4 w-4 mr-2" />
+              Sign in with Autodesk
+            </Button>
+          ) : loading ? (
+            <p className="text-sm text-muted-foreground">Loading projects...</p>
+          ) : projects.length > 0 ? (
+            projects.map((project) => (
+              <div
+                key={project.id}
+                onClick={() => loadModel(project.id)}
+                className="p-3 rounded-lg bg-secondary hover:bg-secondary/80 cursor-pointer transition-colors"
+              >
+                <p className="text-sm font-medium text-foreground">{project.attributes.name}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">No projects found</p>
+          )}
         </div>
       </aside>
 
@@ -144,13 +249,15 @@ const Viewer = () => {
             className="absolute inset-0"
             style={{ backgroundColor: "hsl(var(--background))" }}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center">
-              <p className="text-muted-foreground text-sm">
-                Select a model from the sidebar to begin viewing
-              </p>
+          {!accessToken && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center">
+                <p className="text-muted-foreground text-sm">
+                  Sign in with Autodesk to view your ACC projects
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </main>
     </div>
