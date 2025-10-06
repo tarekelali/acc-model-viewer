@@ -246,11 +246,18 @@ const Viewer = () => {
         return;
       }
 
-      console.log('Using version URN:', tipVersionUrn);
+      console.log('Version URN:', tipVersionUrn);
       
-      // For ACC files, we need to base64-encode the version URN
-      // The version URN is already the document ID we need
-      const documentId = tipVersionUrn;
+      // Base64 encode the version URN for the viewer
+      // Convert to base64 using btoa (browser's built-in function)
+      const base64Urn = btoa(tipVersionUrn)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, ''); // URL-safe base64
+      
+      const documentId = 'urn:' + base64Urn;
+      
+      console.log('Base64 encoded URN:', base64Urn);
       console.log('Loading document:', documentId);
       
       window.Autodesk.Viewing.Document.load(
