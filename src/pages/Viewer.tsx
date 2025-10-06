@@ -192,7 +192,24 @@ const Viewer = () => {
 
   const loadModel = async (input: string) => {
     const projectId = extractProjectId(input);
-    console.log('Loading files for project:', projectId);
+    
+    // Extract folderUrn and entityId from ACC URL if present
+    let folderUrn: string | undefined;
+    let entityId: string | undefined;
+    
+    if (input.includes('acc.autodesk.com')) {
+      const folderMatch = input.match(/folderUrn=([^&]+)/);
+      if (folderMatch) {
+        folderUrn = decodeURIComponent(folderMatch[1]);
+      }
+      
+      const entityMatch = input.match(/entityId=([^&]+)/);
+      if (entityMatch) {
+        entityId = decodeURIComponent(entityMatch[1]);
+      }
+    }
+    
+    console.log('Loading files for project:', projectId, 'folder:', folderUrn, 'entity:', entityId);
     
     if (!viewer) {
       console.error('Viewer not initialized');
@@ -208,6 +225,8 @@ const Viewer = () => {
         body: { 
           token: accessToken,
           projectId: projectId,
+          folderUrn,
+          entityId
         },
       });
 

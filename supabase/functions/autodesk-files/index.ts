@@ -11,9 +11,9 @@ serve(async (req) => {
   }
 
   try {
-    const { token, projectId } = await req.json();
+    const { token, projectId, folderUrn, entityId } = await req.json();
 
-    console.log('Fetching files for project:', projectId);
+    console.log('Fetching files for project:', projectId, 'folderUrn:', folderUrn, 'entityId:', entityId);
     
     // Ensure project ID has 'b.' prefix
     const formattedProjectId = projectId.startsWith('b.') ? projectId : `b.${projectId}`;
@@ -105,7 +105,54 @@ serve(async (req) => {
       });
     }
 
-    // Search through folders to find files
+    // If we have a specific folderUrn and entityId, fetch that specific file
+    if (folderUrn && entityId) {
+      console.log('Fetching specific file from folder:', folderUrn);
+      const contentsUrl = `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/folders/${folderUrn}/contents`;
+      
+      const contentsResponse = await fetch(contentsUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const contentsData = await contentsResponse.json();
+      
+      if (contentsData.data) {
+        // Find the file with the matching lineage ID
+        const specificFile = contentsData.data.find((item: any) => 
+          item.type === 'items' && item.id.includes(entityId.split(':').pop())
+        );
+        
+        if (specificFile) {
+          console.log('Found specific file:', specificFile);
+          return new Response(JSON.stringify({ 
+            data: [specificFile],
+            included: []
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+      
+      console.log('Specific file not found, falling back to search');
+    }
+
+    // If folderUrn is provided but no entityId, search that specific folder
+    if (folderUrn && !entityId) {
+      console.log('Searching specific folder:', folderUrn);
+      const files = await searchFolderForFiles(folderUrn);
+      if (files.length > 0) {
+        return new Response(JSON.stringify({ 
+          data: files,
+          included: []
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // Default behavior: Search through folders to find files
     let allFiles: any[] = [];
     
     for (const folder of foldersData.data) {
