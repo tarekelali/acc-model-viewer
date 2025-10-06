@@ -13,20 +13,46 @@ serve(async (req) => {
   try {
     const { token, projectId, folderId } = await req.json();
 
-    const url = folderId 
-      ? `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${folderId}/contents`
-      : `https://developer.api.autodesk.com/project/v1/hubs/${projectId}/topFolders`;
+    console.log('Fetching files for project:', projectId);
 
-    const response = await fetch(url, {
+    // Get project top folders first
+    const foldersUrl = `https://developer.api.autodesk.com/project/v1/hubs/${projectId.replace('b.', 'b.')}/projects/${projectId}/topFolders`;
+    
+    console.log('Fetching folders from:', foldersUrl);
+
+    const foldersResponse = await fetch(foldersUrl, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
     });
 
-    const data = await response.json();
-    console.log('Files response:', data);
+    const foldersData = await foldersResponse.json();
+    console.log('Folders response:', foldersData);
 
-    return new Response(JSON.stringify(data), {
+    if (!foldersData.data || foldersData.data.length === 0) {
+      return new Response(JSON.stringify({ data: [], included: [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Get contents of first folder
+    const firstFolder = foldersData.data[0];
+    const folderUrn = firstFolder.id;
+    
+    const contentsUrl = `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${folderUrn}/contents`;
+    
+    console.log('Fetching contents from:', contentsUrl);
+
+    const contentsResponse = await fetch(contentsUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const contentsData = await contentsResponse.json();
+    console.log('Contents response:', contentsData);
+
+    return new Response(JSON.stringify(contentsData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

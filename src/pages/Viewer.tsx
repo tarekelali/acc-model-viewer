@@ -156,7 +156,7 @@ const Viewer = () => {
   }, [accessToken]);
 
   const loadModel = async (projectId: string) => {
-    console.log('Loading model for project:', projectId);
+    console.log('Loading files for project:', projectId);
     
     if (!viewer) {
       console.error('Viewer not initialized');
@@ -165,9 +165,50 @@ const Viewer = () => {
     }
 
     try {
-      // For demo: Load a sample URN - you'll need to implement file browsing
-      const documentId = 'urn:dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnJMbllRdFEwV1dpT3Z0aXZiR2RNcFE_dmVyc2lvbj0x';
+      toast('Loading project files...');
       
+      // Get project files
+      const { data: filesData, error: filesError } = await supabase.functions.invoke('autodesk-files', {
+        body: { 
+          token: accessToken,
+          projectId: projectId,
+        },
+      });
+
+      console.log('Files response:', filesData);
+
+      if (filesError) {
+        console.error('Files error:', filesError);
+        toast.error(`Failed to load files: ${filesError.message}`);
+        return;
+      }
+
+      // Find first viewable item (looking for supported formats)
+      const items = filesData.data || filesData.included || [];
+      const viewableItem = items.find((item: any) => {
+        const ext = item.attributes?.displayName?.toLowerCase() || '';
+        return ext.includes('.rvt') || ext.includes('.ifc') || ext.includes('.nwd') || 
+               ext.includes('.dwg') || ext.includes('.dwf');
+      });
+
+      if (!viewableItem) {
+        console.error('No viewable files found');
+        toast.error('No viewable 3D models found in this project');
+        return;
+      }
+
+      console.log('Loading viewable item:', viewableItem);
+      
+      // Get the URN for the model
+      const derivativeUrn = viewableItem.relationships?.derivatives?.data?.id;
+      
+      if (!derivativeUrn) {
+        console.error('No derivative URN found');
+        toast.error('Model not processed for viewing');
+        return;
+      }
+
+      const documentId = 'urn:' + derivativeUrn;
       console.log('Loading document:', documentId);
       
       window.Autodesk.Viewing.Document.load(
@@ -176,11 +217,11 @@ const Viewer = () => {
           console.log('Document loaded successfully:', doc);
           const defaultModel = doc.getRoot().getDefaultGeometry();
           viewer.loadDocumentNode(doc, defaultModel);
-          toast.success("Model loaded");
+          toast.success(`Model loaded: ${viewableItem.attributes.displayName}`);
         },
         (error: any) => {
           console.error('Model load error:', error);
-          toast.error(`Failed to load model: ${error}`);
+          toast.error(`Failed to load model (error ${error})`);
         }
       );
     } catch (error) {
