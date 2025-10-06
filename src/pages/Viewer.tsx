@@ -153,18 +153,16 @@ const Viewer = () => {
       api: "derivativeV2",
       getAccessToken: async (callback: (token: string, expires: number) => void) => {
         try {
-          console.log('Getting viewer token...');
-          const { data, error } = await supabase.functions.invoke('autodesk-viewer-token');
+          console.log('Getting access token for viewer...');
           
-          console.log('Viewer token response:', { data, error });
-          
-          if (error) {
-            console.error('Viewer token error:', error);
-            toast.error(`Token error: ${error.message}`);
-            return;
+          // For ACC files, use the user's 3-legged token instead of a 2-legged viewer token
+          if (accessToken) {
+            console.log('Using user access token for viewer');
+            callback(accessToken, 3600);
+          } else {
+            console.error('No access token available');
+            toast.error('Authentication required');
           }
-          
-          callback(data.access_token, data.expires_in);
         } catch (error) {
           console.error('Token error:', error);
           toast.error(`Failed to get viewer token: ${error instanceof Error ? error.message : 'Unknown error'}`);
