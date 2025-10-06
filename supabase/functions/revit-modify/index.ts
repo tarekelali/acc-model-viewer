@@ -64,14 +64,24 @@ serve(async (req) => {
     
     console.log('Storage ID:', storageId);
 
-    // Step 3: Get signed download URL
+    // Step 3: Parse storage ID and get signed download URL
+    // Storage ID format: urn:adsk.objects:os.object:BUCKET_KEY/OBJECT_KEY
+    const storageIdParts = storageId.split(':');
+    const bucketAndObject = storageIdParts[storageIdParts.length - 1]; // Get last part after last colon
+    const [bucketKey, ...objectKeyParts] = bucketAndObject.split('/');
+    const objectKey = objectKeyParts.join('/'); // Rejoin in case object has slashes
+    
+    console.log('Parsed storage - Bucket:', bucketKey, 'Object:', objectKey);
+    
     const storageResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${storageId.split(':')[3]}/objects/${storageId.split(':')[4]}/signeds3download`,
+      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${objectKey}/signeds3download`,
       { headers: { 'Authorization': `Bearer ${token}` } }
     );
 
     if (!storageResponse.ok) {
-      throw new Error(`Failed to get download URL: ${storageResponse.status}`);
+      const errorText = await storageResponse.text();
+      console.error('Storage download error:', storageResponse.status, errorText);
+      throw new Error(`Failed to get download URL: ${storageResponse.status} - ${errorText}`);
     }
 
     const downloadData = await storageResponse.json();
