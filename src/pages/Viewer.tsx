@@ -368,8 +368,11 @@ const Viewer = () => {
       constructor(viewer: any, options: any) {
         super(viewer, options);
         this.selectedDbId = null;
-        this.gizmo = null;
+        this.gizmoArrows = null;
         this.originalPosition = null;
+        this.accumulatedOffset = new window.THREE.Vector3(0, 0, 0);
+        this.raycaster = new window.THREE.Raycaster();
+        this.keyboardHandler = null;
       }
 
       load() {
@@ -381,6 +384,10 @@ const Viewer = () => {
           this.onSelectionChanged.bind(this)
         );
         
+        // Add keyboard controls
+        this.keyboardHandler = this.onKeyDown.bind(this);
+        document.addEventListener('keydown', this.keyboardHandler);
+        
         return true;
       }
 
@@ -390,7 +397,11 @@ const Viewer = () => {
           this.onSelectionChanged.bind(this)
         );
         
-        if (this.gizmo) {
+        if (this.keyboardHandler) {
+          document.removeEventListener('keydown', this.keyboardHandler);
+        }
+        
+        if (this.gizmoArrows) {
           this.removeGizmo();
         }
         
@@ -402,10 +413,53 @@ const Viewer = () => {
         
         if (selection && selection.length === 1) {
           this.selectedDbId = selection[0];
+          this.accumulatedOffset.set(0, 0, 0);
           this.showGizmo(selection[0]);
         } else {
           this.removeGizmo();
           this.selectedDbId = null;
+        }
+      }
+
+      onKeyDown(event: KeyboardEvent) {
+        if (!this.selectedDbId) return;
+        
+        const step = event.shiftKey ? 1.0 : 0.1;
+        let offset = new window.THREE.Vector3(0, 0, 0);
+        let handled = false;
+        
+        switch(event.key) {
+          case 'ArrowLeft':
+            offset.x = -step;
+            handled = true;
+            break;
+          case 'ArrowRight':
+            offset.x = step;
+            handled = true;
+            break;
+          case 'ArrowUp':
+            offset.y = step;
+            handled = true;
+            break;
+          case 'ArrowDown':
+            offset.y = -step;
+            handled = true;
+            break;
+          case 'PageUp':
+            offset.z = step;
+            handled = true;
+            break;
+          case 'PageDown':
+            offset.z = -step;
+            handled = true;
+            break;
+        }
+        
+        if (handled) {
+          event.preventDefault();
+          this.accumulatedOffset.add(offset);
+          this.moveFragment(this.selectedDbId, this.accumulatedOffset);
+          this.updateGizmoPosition();
         }
       }
 
@@ -426,19 +480,52 @@ const Viewer = () => {
           // Store original position
           this.originalPosition = { x: center.x, y: center.y, z: center.z };
           
-          // Create a simple visual gizmo (sphere marker)
-          if (!this.gizmo) {
-            const geometry = new window.THREE.SphereGeometry(0.5, 16, 16);
-            const material = new window.THREE.MeshBasicMaterial({ 
-              color: 0x00ff00,
-              transparent: true,
-              opacity: 0.7
-            });
-            this.gizmo = new window.THREE.Mesh(geometry, material);
-            viewer.impl.addOverlay('transform-gizmo', this.gizmo);
+          // Create arrow gizmos for X, Y, Z axes
+          if (!this.gizmoArrows) {
+            const arrowLength = 2;
+            const arrowHeadLength = 0.4;
+            const arrowHeadWidth = 0.3;
+            
+            // X axis (red)
+            const xArrow = new window.THREE.ArrowHelper(
+              new window.THREE.Vector3(1, 0, 0),
+              center,
+              arrowLength,
+              0xff0000,
+              arrowHeadLength,
+              arrowHeadWidth
+            );
+            xArrow.userData.axis = 'x';
+            
+            // Y axis (green)
+            const yArrow = new window.THREE.ArrowHelper(
+              new window.THREE.Vector3(0, 1, 0),
+              center,
+              arrowLength,
+              0x00ff00,
+              arrowHeadLength,
+              arrowHeadWidth
+            );
+            yArrow.userData.axis = 'y';
+            
+            // Z axis (blue)
+            const zArrow = new window.THREE.ArrowHelper(
+              new window.THREE.Vector3(0, 0, 1),
+              center,
+              arrowLength,
+              0x0000ff,
+              arrowHeadLength,
+              arrowHeadWidth
+            );
+            zArrow.userData.axis = 'z';
+            
+            this.gizmoArrows = { x: xArrow, y: yArrow, z: zArrow };
+            
+            viewer.impl.addOverlay('transform-gizmo', xArrow);
+            viewer.impl.addOverlay('transform-gizmo', yArrow);
+            viewer.impl.addOverlay('transform-gizmo', zArrow);
           }
           
-          this.gizmo.position.copy(center);
           viewer.impl.invalidate(true);
           
           // Add drag controls
@@ -446,47 +533,90 @@ const Viewer = () => {
         }, true);
       }
 
+      updateGizmoPosition() {
+        if (!this.gizmoArrows || !this.originalPosition) return;
+        
+        const newPos = new window.THREE.Vector3(
+          this.originalPosition.x + this.accumulatedOffset.x,
+          this.originalPosition.y + this.accumulatedOffset.y,
+          this.originalPosition.z + this.accumulatedOffset.z
+        );
+        
+        this.gizmoArrows.x.position.copy(newPos);
+        this.gizmoArrows.y.position.copy(newPos);
+        this.gizmoArrows.z.position.copy(newPos);
+        
+        this.viewer.impl.invalidate(true);
+      }
+
       enableDragging(dbId: number, initialPos: any) {
         const viewer = this.viewer;
         let isDragging = false;
-        let startPoint: any = null;
+        let dragAxis: string | null = null;
+        let startScreenPoint = { x: 0, y: 0 };
         
         const onMouseDown = (event: MouseEvent) => {
           if (event.button !== 0) return;
           
-          const hitTest = viewer.clientToWorld(event.clientX, event.clientY, true);
-          if (hitTest && hitTest.dbId === dbId) {
+          // Test if we clicked on any of the arrow handles
+          const camera = viewer.navigation.getCamera();
+          const mouse = new window.THREE.Vector2(
+            (event.clientX / viewer.canvas.clientWidth) * 2 - 1,
+            -(event.clientY / viewer.canvas.clientHeight) * 2 + 1
+          );
+          
+          this.raycaster.setFromCamera(mouse, camera);
+          
+          // Check intersection with arrow handles
+          const intersects: any[] = [];
+          if (this.gizmoArrows) {
+            Object.values(this.gizmoArrows).forEach((arrow: any) => {
+              const hits = this.raycaster.intersectObject(arrow, true);
+              hits.forEach(hit => {
+                hit.object.userData.axis = arrow.userData.axis;
+                intersects.push(hit);
+              });
+            });
+          }
+          
+          if (intersects.length > 0) {
             isDragging = true;
-            startPoint = hitTest.point;
+            dragAxis = intersects[0].object.userData.axis;
+            startScreenPoint = { x: event.clientX, y: event.clientY };
             viewer.impl.controls.setIsLocked(true);
             event.stopPropagation();
           }
         };
 
         const onMouseMove = (event: MouseEvent) => {
-          if (!isDragging || !startPoint) return;
+          if (!isDragging || !dragAxis) return;
           
-          const hitTest = viewer.clientToWorld(event.clientX, event.clientY, true);
-          if (hitTest && hitTest.point) {
-            const delta = new window.THREE.Vector3(
-              hitTest.point.x - startPoint.x,
-              hitTest.point.y - startPoint.y,
-              hitTest.point.z - startPoint.z
-            );
-            
-            // Update gizmo position
-            if (this.gizmo) {
-              this.gizmo.position.set(
-                initialPos.x + delta.x,
-                initialPos.y + delta.y,
-                initialPos.z + delta.z
-              );
-              viewer.impl.invalidate(true);
-            }
-            
-            // Move the actual model fragment
-            this.moveFragment(dbId, delta);
+          // Calculate screen movement
+          const deltaX = event.clientX - startScreenPoint.x;
+          const deltaY = event.clientY - startScreenPoint.y;
+          
+          // Convert screen delta to world delta along the selected axis
+          const sensitivity = 0.01;
+          let offset = new window.THREE.Vector3(0, 0, 0);
+          
+          switch(dragAxis) {
+            case 'x':
+              offset.x = deltaX * sensitivity;
+              break;
+            case 'y':
+              offset.y = -deltaY * sensitivity;
+              break;
+            case 'z':
+              offset.z = -deltaY * sensitivity;
+              break;
           }
+          
+          // Update accumulated offset
+          this.accumulatedOffset.copy(offset);
+          
+          // Move fragment and update gizmo
+          this.moveFragment(dbId, this.accumulatedOffset);
+          this.updateGizmoPosition();
           
           event.stopPropagation();
         };
@@ -495,11 +625,16 @@ const Viewer = () => {
           if (!isDragging) return;
           
           isDragging = false;
+          dragAxis = null;
           viewer.impl.controls.setIsLocked(false);
           
           // Record the change
-          if (this.gizmo && this.originalPosition) {
-            const newPos = this.gizmo.position;
+          if (this.originalPosition && this.accumulatedOffset.length() > 0) {
+            const newPos = {
+              x: this.originalPosition.x + this.accumulatedOffset.x,
+              y: this.originalPosition.y + this.accumulatedOffset.y,
+              z: this.originalPosition.z + this.accumulatedOffset.z
+            };
             
             // Get element name
             viewer.model.getProperties(dbId, (result: any) => {
@@ -511,7 +646,7 @@ const Viewer = () => {
                 const change = {
                   dbId,
                   originalPosition: this.originalPosition,
-                  newPosition: { x: newPos.x, y: newPos.y, z: newPos.z },
+                  newPosition: newPos,
                   elementName
                 };
                 
@@ -543,29 +678,29 @@ const Viewer = () => {
         };
       }
 
-      moveFragment(dbId: number, delta: any) {
+      moveFragment(dbId: number, totalOffset: any) {
         const viewer = this.viewer;
         const model = viewer.model;
         const tree = model.getInstanceTree();
-        const fragList = model.getFragmentList();
         
         tree.enumNodeFragments(dbId, (fragId: number) => {
           const fragProxy = viewer.impl.getFragmentProxy(model, fragId);
           fragProxy.getAnimTransform();
           
-          const position = new window.THREE.Vector3(delta.x, delta.y, delta.z);
-          fragProxy.position = position;
+          // Add to current position instead of replacing
+          fragProxy.position.set(totalOffset.x, totalOffset.y, totalOffset.z);
           fragProxy.updateAnimTransform();
-          
         }, true);
         
         viewer.impl.invalidate(true, true, true);
       }
 
       removeGizmo() {
-        if (this.gizmo) {
-          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmo);
-          this.gizmo = null;
+        if (this.gizmoArrows) {
+          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoArrows.x);
+          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoArrows.y);
+          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoArrows.z);
+          this.gizmoArrows = null;
         }
         
         if (this.dragCleanup) {
@@ -573,6 +708,7 @@ const Viewer = () => {
         }
         
         this.originalPosition = null;
+        this.accumulatedOffset.set(0, 0, 0);
       }
     }
 
@@ -705,7 +841,7 @@ const Viewer = () => {
               size="icon"
               onClick={toggleEditMode}
               className="hover:bg-secondary"
-              title="Toggle Edit Mode"
+              title={editMode ? "Exit Edit Mode" : "Enter Edit Mode"}
             >
               <Edit3 className="h-5 w-5" />
             </Button>
@@ -768,6 +904,16 @@ const Viewer = () => {
                   Sign in with Autodesk to view your ACC projects
                 </p>
               </div>
+            </div>
+          )}
+          
+          {/* Edit Mode Instructions */}
+          {editMode && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card/95 border border-border rounded-lg px-4 py-2 shadow-lg">
+              <p className="text-sm text-foreground font-medium">
+                Click element → Drag colored arrows (X/Y/Z) or use keyboard: 
+                <span className="ml-2 text-muted-foreground">Arrows=XY • PgUp/PgDn=Z • Shift=Faster</span>
+              </p>
             </div>
           )}
         </div>
