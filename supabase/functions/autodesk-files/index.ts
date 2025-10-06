@@ -39,6 +39,52 @@ serve(async (req) => {
     const hubId = hubsData.data[0].id;
     console.log('Using hub:', hubId);
 
+    // Helper function to recursively search folders for files
+    const searchFolderForFiles = async (folderUrn: string, depth = 0): Promise<any[]> => {
+      if (depth > 3) return []; // Limit recursion depth
+      
+      const contentsUrl = `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/folders/${folderUrn}/contents`;
+      
+      const contentsResponse = await fetch(contentsUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const contentsData = await contentsResponse.json();
+      
+      if (!contentsData.data) return [];
+      
+      const files: any[] = [];
+      const folders: any[] = [];
+      
+      // Separate files and folders
+      for (const item of contentsData.data) {
+        if (item.type === 'items') {
+          files.push(item);
+        } else if (item.type === 'folders') {
+          folders.push(item);
+        }
+      }
+      
+      console.log(`Folder ${folderUrn} - Found ${files.length} files, ${folders.length} subfolders`);
+      
+      // If we found files, return them
+      if (files.length > 0) {
+        return files;
+      }
+      
+      // Otherwise, search subfolders
+      for (const folder of folders) {
+        const subFiles = await searchFolderForFiles(folder.id, depth + 1);
+        if (subFiles.length > 0) {
+          return subFiles;
+        }
+      }
+      
+      return [];
+    };
+
     // Get project top folders
     const foldersUrl = `https://developer.api.autodesk.com/project/v1/hubs/${hubId}/projects/${formattedProjectId}/topFolders`;
     
@@ -59,24 +105,24 @@ serve(async (req) => {
       });
     }
 
-    // Get contents of first folder
-    const firstFolder = foldersData.data[0];
-    const folderUrn = firstFolder.id;
+    // Search through folders to find files
+    let allFiles: any[] = [];
     
-    const contentsUrl = `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/folders/${folderUrn}/contents`;
-    
-    console.log('Fetching contents from:', contentsUrl);
+    for (const folder of foldersData.data) {
+      console.log(`Searching folder: ${folder.attributes.name}`);
+      const files = await searchFolderForFiles(folder.id);
+      allFiles = allFiles.concat(files);
+      
+      // If we found files, we can stop searching
+      if (allFiles.length > 0) break;
+    }
 
-    const contentsResponse = await fetch(contentsUrl, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+    console.log(`Total files found: ${allFiles.length}`);
 
-    const contentsData = await contentsResponse.json();
-    console.log('Contents response:', contentsData);
-
-    return new Response(JSON.stringify(contentsData), {
+    return new Response(JSON.stringify({ 
+      data: allFiles,
+      included: []
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
