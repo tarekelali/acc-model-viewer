@@ -26,6 +26,7 @@ const Viewer = () => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
+  const [manualProjectId, setManualProjectId] = useState("");
 
   // Check for auth callback
   useEffect(() => {
@@ -260,7 +261,34 @@ const Viewer = () => {
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold text-foreground">ACC Projects</h2>
         </div>
-        <div className="p-4 space-y-2">
+        <div className="p-4 space-y-4">
+          {/* Manual Project ID Input */}
+          {accessToken && (
+            <div className="space-y-2 pb-4 border-b border-border">
+              <label className="text-sm font-medium text-foreground">Quick Load Project</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualProjectId}
+                  onChange={(e) => setManualProjectId(e.target.value)}
+                  placeholder="Paste project ID..."
+                  className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+                <Button
+                  onClick={() => {
+                    if (manualProjectId.trim()) {
+                      loadModel(manualProjectId.trim());
+                    }
+                  }}
+                  disabled={!manualProjectId.trim()}
+                  size="sm"
+                >
+                  Load
+                </Button>
+              </div>
+            </div>
+          )}
+          
           {!accessToken ? (
             <Button onClick={handleLogin} className="w-full" size="sm">
               <LogIn className="h-4 w-4 mr-2" />
