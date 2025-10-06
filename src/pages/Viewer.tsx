@@ -246,34 +246,11 @@ const Viewer = () => {
         return;
       }
 
-      console.log('Fetching version details for:', tipVersionUrn);
+      console.log('Using version URN:', tipVersionUrn);
       
-      // Get the version details to access derivatives
-      const { data: versionData, error: versionError } = await supabase.functions.invoke('autodesk-files', {
-        body: { 
-          token: accessToken,
-          versionUrn: tipVersionUrn,
-        },
-      });
-
-      console.log('Version response:', versionData);
-
-      if (versionError || !versionData) {
-        console.error('Version error:', versionError);
-        toast.error('Failed to load file version');
-        return;
-      }
-
-      // Get the URN for the model from the version's derivatives
-      const derivativeUrn = versionData.relationships?.derivatives?.data?.id;
-      
-      if (!derivativeUrn) {
-        console.error('No derivative URN found in version');
-        toast.error('Model not processed for viewing');
-        return;
-      }
-
-      const documentId = 'urn:' + derivativeUrn;
+      // For ACC files, we need to base64-encode the version URN
+      // The version URN is already the document ID we need
+      const documentId = tipVersionUrn;
       console.log('Loading document:', documentId);
       
       window.Autodesk.Viewing.Document.load(
