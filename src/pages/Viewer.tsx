@@ -29,15 +29,21 @@ const Viewer = () => {
 
   // Check for auth callback
   useEffect(() => {
+    console.log('Checking for auth token...');
     const token = searchParams.get('token');
+    
     if (token) {
+      console.log('Token found in URL:', token.substring(0, 20) + '...');
       setAccessToken(token);
       localStorage.setItem('autodesk_token', token);
       toast.success("Authentication successful");
     } else {
       const savedToken = localStorage.getItem('autodesk_token');
       if (savedToken) {
+        console.log('Using saved token:', savedToken.substring(0, 20) + '...');
         setAccessToken(savedToken);
+      } else {
+        console.log('No token found');
       }
     }
   }, [searchParams]);
@@ -51,18 +57,26 @@ const Viewer = () => {
 
   const fetchProjects = async () => {
     setLoading(true);
+    console.log('Fetching projects with token:', accessToken?.substring(0, 20) + '...');
+    
     try {
       const { data, error } = await supabase.functions.invoke('autodesk-projects', {
         body: { token: accessToken },
       });
 
-      if (error) throw error;
+      console.log('Projects response:', { data, error });
+
+      if (error) {
+        console.error('Supabase function error:', error);
+        toast.error(`Error: ${error.message}`);
+        return;
+      }
       
       setProjects(data.data || []);
       toast.success(`Loaded ${data.data?.length || 0} projects`);
     } catch (error) {
       console.error('Error fetching projects:', error);
-      toast.error("Failed to load projects");
+      toast.error(`Failed to load projects: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -70,23 +84,43 @@ const Viewer = () => {
 
   const handleLogin = () => {
     const authUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autodesk-auth`;
+    console.log('Redirecting to auth URL:', authUrl);
     window.location.href = authUrl;
   };
 
   // Initialize viewer
   useEffect(() => {
-    if (!viewerRef.current || !window.Autodesk || !accessToken) return;
+    if (!viewerRef.current || !window.Autodesk || !accessToken) {
+      console.log('Viewer init skipped:', { 
+        hasRef: !!viewerRef.current, 
+        hasAutodesk: !!window.Autodesk, 
+        hasToken: !!accessToken 
+      });
+      return;
+    }
+
+    console.log('Initializing Autodesk Viewer...');
 
     const options = {
       env: "AutodeskProduction",
       api: "derivativeV2",
       getAccessToken: async (callback: (token: string, expires: number) => void) => {
         try {
-          const { data } = await supabase.functions.invoke('autodesk-viewer-token');
+          console.log('Getting viewer token...');
+          const { data, error } = await supabase.functions.invoke('autodesk-viewer-token');
+          
+          console.log('Viewer token response:', { data, error });
+          
+          if (error) {
+            console.error('Viewer token error:', error);
+            toast.error(`Token error: ${error.message}`);
+            return;
+          }
+          
           callback(data.access_token, data.expires_in);
         } catch (error) {
           console.error('Token error:', error);
-          toast.error("Failed to get viewer token");
+          toast.error(`Failed to get viewer token: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       },
     };
@@ -94,22 +128,28 @@ const Viewer = () => {
     window.Autodesk.Viewing.Initializer(options, () => {
       const viewerDiv = viewerRef.current;
       if (viewerDiv) {
+        console.log('Creating viewer instance...');
         const viewer3D = new window.Autodesk.Viewing.GuiViewer3D(viewerDiv);
         viewer3D.start();
         setViewer(viewer3D);
+        console.log('Viewer initialized successfully');
         toast.success("Viewer initialized");
       }
     });
 
     return () => {
       if (viewer) {
+        console.log('Cleaning up viewer...');
         viewer.finish();
       }
     };
   }, [accessToken]);
 
   const loadModel = async (projectId: string) => {
+    console.log('Loading model for project:', projectId);
+    
     if (!viewer) {
+      console.error('Viewer not initialized');
       toast.error("Viewer not initialized");
       return;
     }
@@ -118,21 +158,24 @@ const Viewer = () => {
       // For demo: Load a sample URN - you'll need to implement file browsing
       const documentId = 'urn:dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnJMbllRdFEwV1dpT3Z0aXZiR2RNcFE_dmVyc2lvbj0x';
       
+      console.log('Loading document:', documentId);
+      
       window.Autodesk.Viewing.Document.load(
         documentId,
         (doc: any) => {
+          console.log('Document loaded successfully:', doc);
           const defaultModel = doc.getRoot().getDefaultGeometry();
           viewer.loadDocumentNode(doc, defaultModel);
           toast.success("Model loaded");
         },
         (error: any) => {
           console.error('Model load error:', error);
-          toast.error("Failed to load model");
+          toast.error(`Failed to load model: ${error}`);
         }
       );
     } catch (error) {
       console.error('Load error:', error);
-      toast.error("Error loading model");
+      toast.error(`Error loading model: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

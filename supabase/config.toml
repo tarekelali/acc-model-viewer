@@ -1,1 +1,13 @@
 project_id = "mbkfbmsjwlgqyzhfjwka"
+
+[functions.autodesk-auth]
+verify_jwt = false
+
+[functions.autodesk-projects]
+verify_jwt = false
+
+[functions.autodesk-files]
+verify_jwt = false
+
+[functions.autodesk-viewer-token]
+verify_jwt = false
