@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.autodesk-viewer-token]
 verify_jwt = false
+
+[functions.revit-modify]
+verify_jwt = false

@@ -26,7 +26,7 @@ serve(async (req) => {
         `response_type=code&` +
         `client_id=${clientId}&` +
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `scope=data:read data:write viewables:read`;
+        `scope=data:read data:write data:create viewables:read code:all`;
 
       console.log('Redirecting to Autodesk:', authUrl);
 

@@ -53,6 +53,9 @@ const Viewer = () => {
     newPosition: { x: number; y: number; z: number };
     elementName: string;
   }>>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentItemId, setCurrentItemId] = useState<string | null>(null);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -215,6 +218,7 @@ const Viewer = () => {
 
   const loadModel = async (input: string) => {
     const projectId = extractProjectId(input);
+    setCurrentProjectId(projectId);
     
     // Extract folderUrn and entityId from ACC URL if present
     let folderUrn: string | undefined;
@@ -229,6 +233,7 @@ const Viewer = () => {
       const entityMatch = input.match(/entityId=([^&]+)/);
       if (entityMatch) {
         entityId = decodeURIComponent(entityMatch[1]);
+        setCurrentItemId(entityId);
       }
     }
     
@@ -733,11 +738,52 @@ const Viewer = () => {
     setShowSaveDialog(true);
   };
 
-  const confirmSave = () => {
-    console.log('Saving changes:', pendingChanges);
-    toast.success(`Saved ${pendingChanges.length} changes`);
-    // TODO: Phase 3 - Call Design Automation API
+  const confirmSave = async () => {
+    setIsSaving(true);
     setShowSaveDialog(false);
+    
+    try {
+      if (!currentProjectId || !currentItemId) {
+        throw new Error('No model loaded - project or item ID missing');
+      }
+
+      toast('Initiating save to Revit file...');
+
+      // Call Design Automation edge function
+      const { data, error } = await supabase.functions.invoke('revit-modify', {
+        body: {
+          token: accessToken,
+          projectId: currentProjectId,
+          itemId: currentItemId,
+          transforms: pendingChanges.map(change => ({
+            dbId: change.dbId,
+            elementName: change.elementName,
+            originalPosition: change.originalPosition,
+            newPosition: change.newPosition
+          }))
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Design Automation response:', data);
+
+      toast.success(`Changes saved! ${pendingChanges.length} elements modified`);
+      
+      // Clear pending changes
+      setPendingChanges([]);
+      
+      // Note: In production, you would reload the model here with the new version
+      // await loadModel(manualProjectId);
+      
+    } catch (error) {
+      console.error('Save error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save changes');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const clearChanges = () => {
@@ -850,10 +896,20 @@ const Viewer = () => {
                 variant="default"
                 size="sm"
                 onClick={handleSaveChanges}
+                disabled={isSaving}
                 className="gap-1"
               >
-                <Save className="h-4 w-4" />
-                Save ({pendingChanges.length})
+                {isSaving ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save ({pendingChanges.length})
+                  </>
+                )}
               </Button>
             )}
             <Button
