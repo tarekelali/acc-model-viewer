@@ -13,7 +13,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { 
+  saveTokens, 
+  getValidAccessToken, 
+  startAuthFlow,
+  clearTokens 
+} from '@/lib/autodesk-auth';
 
 declare global {
   interface Window {
@@ -56,6 +63,7 @@ const Viewer = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [currentItemId, setCurrentItemId] = useState<string | null>(null);
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -68,24 +76,31 @@ const Viewer = () => {
     return input.trim();
   };
 
-  // Check for auth callback
+  // Check for auth callback or load stored tokens
   useEffect(() => {
     console.log('Checking for auth token...');
     const token = searchParams.get('token');
+    const refresh = searchParams.get('refresh');
+    const expires = searchParams.get('expires');
     
-    if (token) {
-      console.log('Token found in URL:', token.substring(0, 20) + '...');
+    if (token && refresh && expires) {
+      console.log('New tokens received from auth callback');
+      saveTokens(token, refresh, parseInt(expires));
       setAccessToken(token);
-      localStorage.setItem('autodesk_token', token);
-      toast.success("Authentication successful");
+      setShowAuthPrompt(false);
+      toast.success("Authentication successful - you're logged in for 14 days");
     } else {
-      const savedToken = localStorage.getItem('autodesk_token');
-      if (savedToken) {
-        console.log('Using saved token:', savedToken.substring(0, 20) + '...');
-        setAccessToken(savedToken);
-      } else {
-        console.log('No token found');
-      }
+      // Try to get valid token (will auto-refresh if needed)
+      getValidAccessToken().then(token => {
+        if (token) {
+          console.log('Using valid access token from storage');
+          setAccessToken(token);
+          setShowAuthPrompt(false);
+        } else {
+          console.log('No valid token found, authentication required');
+          setShowAuthPrompt(true);
+        }
+      });
     }
   }, [searchParams]);
 
@@ -96,13 +111,25 @@ const Viewer = () => {
     }
   }, [accessToken]);
 
+  const ensureValidToken = async (): Promise<string> => {
+    const token = await getValidAccessToken();
+    if (!token) {
+      setShowAuthPrompt(true);
+      throw new Error('Authentication required');
+    }
+    setAccessToken(token);
+    return token;
+  };
+
   const fetchProjects = async () => {
     setLoading(true);
-    console.log('Fetching projects with token:', accessToken?.substring(0, 20) + '...');
     
     try {
+      const token = await ensureValidToken();
+      console.log('Fetching projects with valid token');
+      
       const { data, error } = await supabase.functions.invoke('autodesk-projects', {
-        body: { token: accessToken },
+        body: { token },
       });
 
       console.log('Projects response:', { data, error });
@@ -146,19 +173,7 @@ const Viewer = () => {
   };
 
   const handleLogin = () => {
-    const authUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autodesk-auth`;
-    console.log('Opening auth URL in new tab:', authUrl);
-    
-    // Open in new tab to avoid iframe restrictions
-    const authWindow = window.open(authUrl, '_blank');
-    
-    if (!authWindow) {
-      toast.error('Popup blocked - please allow popups for this site');
-      // Fallback: try direct navigation
-      window.top!.location.href = authUrl;
-    } else {
-      toast('Opening Autodesk login...');
-    }
+    startAuthFlow();
   };
 
   // Initialize viewer
@@ -246,12 +261,13 @@ const Viewer = () => {
     }
 
     try {
+      const token = await ensureValidToken();
       toast('Loading project files...');
       
       // Get project files
       const { data: filesData, error: filesError } = await supabase.functions.invoke('autodesk-files', {
         body: { 
-          token: accessToken,
+          token,
           projectId: projectId,
           folderUrn,
           entityId
@@ -1021,6 +1037,21 @@ const Viewer = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Auth Prompt Dialog */}
+      {showAuthPrompt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-2">Authentication Required</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Your session has expired or you need to sign in to access ACC projects.
+            </p>
+            <Button onClick={() => startAuthFlow()} className="w-full">
+              Sign In with Autodesk
+            </Button>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

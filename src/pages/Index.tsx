@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Building2, FileBox, Lock } from "lucide-react";
+import { startAuthFlow } from "@/lib/autodesk-auth";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -14,7 +15,9 @@ const Index = () => {
             <Building2 className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold text-foreground">ACC Viewer</h1>
           </div>
-          <Button variant="outline">Sign In</Button>
+          <Button variant="outline" onClick={startAuthFlow}>
+            Sign In with Autodesk
+          </Button>
         </div>
       </header>
 
