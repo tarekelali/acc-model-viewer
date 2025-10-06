@@ -11,7 +11,32 @@ serve(async (req) => {
   }
 
   try {
-    const { token, projectId, folderId } = await req.json();
+    const { token, projectId, versionUrn } = await req.json();
+
+    // If requesting a specific version's details
+    if (versionUrn) {
+      console.log('Fetching version details for:', versionUrn);
+      
+      // The version URN is in format: urn:adsk.wipprod:fs.file:vf.xxx?version=1
+      // We need to GET it from the Data Management API
+      const versionUrl = `https://developer.api.autodesk.com/data/v1/projects/versions/${encodeURIComponent(versionUrn)}`;
+      
+      console.log('Version URL:', versionUrl);
+      
+      const versionResponse = await fetch(versionUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const versionData = await versionResponse.json();
+      console.log('Version data:', versionData);
+
+      // Return the version data which should have derivatives
+      return new Response(JSON.stringify(versionData.data || versionData), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     console.log('Fetching files for project:', projectId);
     
