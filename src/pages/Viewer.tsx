@@ -84,9 +84,18 @@ const Viewer = () => {
 
   const handleLogin = () => {
     const authUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autodesk-auth`;
-    console.log('Redirecting to auth URL:', authUrl);
-    // Direct redirect for OAuth flow - don't use fetch()
-    window.location.href = authUrl;
+    console.log('Opening auth URL in new tab:', authUrl);
+    
+    // Open in new tab to avoid iframe restrictions
+    const authWindow = window.open(authUrl, '_blank');
+    
+    if (!authWindow) {
+      toast.error('Popup blocked - please allow popups for this site');
+      // Fallback: try direct navigation
+      window.top!.location.href = authUrl;
+    } else {
+      toast('Opening Autodesk login...');
+    }
   };
 
   // Initialize viewer
