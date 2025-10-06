@@ -14,9 +14,33 @@ serve(async (req) => {
     const { token, projectId, folderId } = await req.json();
 
     console.log('Fetching files for project:', projectId);
+    
+    // Ensure project ID has 'b.' prefix
+    const formattedProjectId = projectId.startsWith('b.') ? projectId : `b.${projectId}`;
 
-    // Get project top folders first
-    const foldersUrl = `https://developer.api.autodesk.com/project/v1/hubs/${projectId.replace('b.', 'b.')}/projects/${projectId}/topFolders`;
+    // First, get the project details to find its hub
+    const projectUrl = `https://developer.api.autodesk.com/project/v1/hubs`;
+    const hubsResponse = await fetch(projectUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const hubsData = await hubsResponse.json();
+    console.log('Hubs response:', hubsData);
+    
+    if (!hubsData.data || hubsData.data.length === 0) {
+      return new Response(JSON.stringify({ error: 'No hubs found', data: [], included: [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Use the first hub (or find the right one)
+    const hubId = hubsData.data[0].id;
+    console.log('Using hub:', hubId);
+
+    // Get project top folders
+    const foldersUrl = `https://developer.api.autodesk.com/project/v1/hubs/${hubId}/projects/${formattedProjectId}/topFolders`;
     
     console.log('Fetching folders from:', foldersUrl);
 
@@ -30,7 +54,7 @@ serve(async (req) => {
     console.log('Folders response:', foldersData);
 
     if (!foldersData.data || foldersData.data.length === 0) {
-      return new Response(JSON.stringify({ data: [], included: [] }), {
+      return new Response(JSON.stringify({ error: 'No folders found', data: [], included: [] }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -39,7 +63,7 @@ serve(async (req) => {
     const firstFolder = foldersData.data[0];
     const folderUrn = firstFolder.id;
     
-    const contentsUrl = `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${folderUrn}/contents`;
+    const contentsUrl = `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/folders/${folderUrn}/contents`;
     
     console.log('Fetching contents from:', contentsUrl);
 

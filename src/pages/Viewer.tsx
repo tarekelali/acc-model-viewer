@@ -27,6 +27,20 @@ const Viewer = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [manualProjectId, setManualProjectId] = useState("");
+  
+  // Target project to prioritize
+  const TARGET_PROJECT_ID = "98278c51-84f5-4955-90c3-cfd337c8b225";
+  
+  // Helper to extract project ID from URL or return as-is
+  const extractProjectId = (input: string): string => {
+    // If it's a URL, extract the project ID
+    if (input.includes('acc.autodesk.com') || input.includes('http')) {
+      const match = input.match(/projects\/([a-f0-9-]+)/i);
+      if (match) return match[1];
+    }
+    // Otherwise return as-is (already a project ID)
+    return input.trim();
+  };
 
   // Check for auth callback
   useEffect(() => {
@@ -73,8 +87,30 @@ const Viewer = () => {
         return;
       }
       
-      setProjects(data.data || []);
-      toast.success(`Loaded ${data.data?.length || 0} projects`);
+      const allProjects = data.data || [];
+      
+      // Sort projects to put target project first
+      const sortedProjects = allProjects.sort((a: Project, b: Project) => {
+        const aId = a.id.replace('b.', '');
+        const bId = b.id.replace('b.', '');
+        
+        if (aId === TARGET_PROJECT_ID) return -1;
+        if (bId === TARGET_PROJECT_ID) return 1;
+        return 0;
+      });
+      
+      setProjects(sortedProjects);
+      toast.success(`Loaded ${sortedProjects.length} projects`);
+      
+      // Auto-load target project if found
+      const targetProject = sortedProjects.find((p: Project) => 
+        p.id.replace('b.', '') === TARGET_PROJECT_ID
+      );
+      
+      if (targetProject) {
+        console.log('Auto-loading target project:', targetProject.attributes.name);
+        setTimeout(() => loadModel(targetProject.id), 1000);
+      }
     } catch (error) {
       console.error('Error fetching projects:', error);
       toast.error(`Failed to load projects: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -156,7 +192,8 @@ const Viewer = () => {
     };
   }, [accessToken]);
 
-  const loadModel = async (projectId: string) => {
+  const loadModel = async (input: string) => {
+    const projectId = extractProjectId(input);
     console.log('Loading files for project:', projectId);
     
     if (!viewer) {
@@ -271,13 +308,13 @@ const Viewer = () => {
                   type="text"
                   value={manualProjectId}
                   onChange={(e) => setManualProjectId(e.target.value)}
-                  placeholder="Paste project ID..."
+                  placeholder="Paste project ID or URL..."
                   className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
                 <Button
                   onClick={() => {
                     if (manualProjectId.trim()) {
-                      loadModel(manualProjectId.trim());
+                      loadModel(manualProjectId);
                     }
                   }}
                   disabled={!manualProjectId.trim()}
@@ -286,6 +323,7 @@ const Viewer = () => {
                   Load
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">Accepts project ID or full ACC URL</p>
             </div>
           )}
           
@@ -297,15 +335,25 @@ const Viewer = () => {
           ) : loading ? (
             <p className="text-sm text-muted-foreground">Loading projects...</p>
           ) : projects.length > 0 ? (
-            projects.map((project) => (
-              <div
-                key={project.id}
-                onClick={() => loadModel(project.id)}
-                className="p-3 rounded-lg bg-secondary hover:bg-secondary/80 cursor-pointer transition-colors"
-              >
-                <p className="text-sm font-medium text-foreground">{project.attributes.name}</p>
-              </div>
-            ))
+            projects.map((project) => {
+              const isTarget = project.id.replace('b.', '') === TARGET_PROJECT_ID;
+              return (
+                <div
+                  key={project.id}
+                  onClick={() => loadModel(project.id)}
+                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                    isTarget 
+                      ? 'bg-primary/10 hover:bg-primary/20 border border-primary/30' 
+                      : 'bg-secondary hover:bg-secondary/80'
+                  }`}
+                >
+                  <p className="text-sm font-medium text-foreground">
+                    {project.attributes.name}
+                    {isTarget && <span className="ml-2 text-xs text-primary">(Target)</span>}
+                  </p>
+                </div>
+              );
+            })
           ) : (
             <p className="text-sm text-muted-foreground">No projects found</p>
           )}
