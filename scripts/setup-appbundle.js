@@ -22,7 +22,7 @@ const CLIENT_ID = process.env.AUTODESK_CLIENT_ID || 'UonGGAilCryEuzl6kCD2owAcIiF
 const CLIENT_SECRET = process.env.AUTODESK_CLIENT_SECRET;
 const APPBUNDLE_NAME = 'RevitTransformApp';
 const ACTIVITY_NAME = 'RevitTransformActivity';
-const ENGINE = 'Autodesk.Revit+2024';
+const ENGINE = 'Autodesk.Revit+2025';
 const ZIP_PATH = path.join(__dirname, '..', 'RevitTransformPlugin.zip');
 
 if (!CLIENT_SECRET) {
