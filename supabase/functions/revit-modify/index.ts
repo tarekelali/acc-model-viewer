@@ -117,7 +117,7 @@ serve(async (req) => {
 
     // Step 4: Get aliases for Design Automation
     const appBundleAlias = Deno.env.get('DA_APPBUNDLE_ALIAS') || `${clientId}.RevitTransformPlugin+1`;
-    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivityFinal2+v1`;
+    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivityFinal2+1`;
     
     console.log('Using AppBundle:', appBundleAlias);
     console.log('Using Activity:', activityAlias);
