@@ -33,6 +33,33 @@ serve(async (req) => {
       );
     }
 
+    // Get 2-legged token for Design Automation API
+    const clientId = 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
+    const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
+    
+    console.log('Getting 2-legged token for Design Automation...');
+    const tokenResponse = await fetch('https://developer.api.autodesk.com/authentication/v2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret!,
+        scope: 'code:all bucket:create bucket:read data:read data:write',
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const error = await tokenResponse.text();
+      throw new Error(`Failed to get 2-legged token: ${error}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    const twoLeggedToken = tokenData.access_token;
+    console.log('Got 2-legged token for Design Automation');
+
     // Step 1: Get item details and download URL
     console.log('Step 1: Fetching item details...');
     const itemResponse = await fetch(
@@ -88,8 +115,7 @@ serve(async (req) => {
     
     console.log('Got signed download URL for input file');
 
-    // Step 4: Get client ID and aliases for Design Automation
-    const clientId = "UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY";
+    // Step 4: Get aliases for Design Automation
     const appBundleAlias = Deno.env.get('DA_APPBUNDLE_ALIAS') || `${clientId}.RevitTransformPlugin+prod`;
     const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivityFinal2+prod`;
     
@@ -106,7 +132,7 @@ serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${twoLeggedToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -125,7 +151,7 @@ serve(async (req) => {
     const outputObjectKey = 'output.rvt';
     const outputSignedResponse = await fetch(
       `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${outputObjectKey}/signeds3upload`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
+      { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
     );
     
     const outputSignedData = await outputSignedResponse.json();
@@ -167,7 +193,7 @@ serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${twoLeggedToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(workItemPayload)
@@ -207,7 +233,7 @@ serve(async (req) => {
       
       const statusResponse = await fetch(
         `https://developer.api.autodesk.com/da/us-east/v3/workitems/${workItemId}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+        { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
       );
       
       if (!statusResponse.ok) {
@@ -236,7 +262,7 @@ serve(async (req) => {
     
     const modifiedFileResponse = await fetch(
       `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${outputObjectKey}`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
+      { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
     );
 
     if (!modifiedFileResponse.ok) {
