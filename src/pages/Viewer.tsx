@@ -38,10 +38,10 @@ interface Project {
 
 const Viewer = () => {
   // Target project to prioritize
-  const TARGET_PROJECT_ID = "98278c51-84f5-4955-90c3-cfd337c8b225";
+  const TARGET_PROJECT_ID = "d27a6383-5881-4756-9cff-3deccd318427";
   
   // Hardcoded trial model URL
-  const TRIAL_MODEL_URL = "https://acc.autodesk.com/docs/files/projects/98278c51-84f5-4955-90c3-cfd337c8b225?folderUrn=urn%3Aadsk.wipprod%3Afs.folder%3Aco.zr0cAH1lWP6TBbnZTaeKEg&entityId=urn%3Aadsk.wipprod%3Adm.lineage%3ArLnYQtQ0WwiOvtivbGdMpQ&viewModel=detail&moduleId=folders&viewableGuid=f45222b7-9a71-d2d4-9674-a73d51f2c767";
+  const TRIAL_MODEL_URL = "https://acc.autodesk.com/docs/files/projects/d27a6383-5881-4756-9cff-3deccd318427?folderUrn=urn%3Aadsk.wipprod%3Afs.folder%3Aco.pTXcoJRjSkuopE4nj1Y-yA&entityId=urn%3Aadsk.wipprod%3Adm.lineage%3AGHgronViQjKVtKfVIp91Vg&viewModel=detail&moduleId=folders&viewableGuid=f45222b7-9a71-d2d4-9674-a73d51f2c767";
   
   const viewerRef = useRef<HTMLDivElement>(null);
   const transformExtensionRef = useRef<any>(null);
