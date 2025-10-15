@@ -117,7 +117,7 @@ serve(async (req) => {
 
     // Step 4: Get aliases for Design Automation
     const appBundleAlias = Deno.env.get('DA_APPBUNDLE_ALIAS') || `${clientId}.RevitTransformPlugin+prod`;
-    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivityFinal2+prod`;
+    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.RevitTransformActivity+v1`;
     
     console.log('Using AppBundle:', appBundleAlias);
     console.log('Using Activity:', activityAlias);
@@ -178,7 +178,7 @@ serve(async (req) => {
     const workItemPayload = {
       activityId: activityAlias,
       arguments: {
-        inputRvt: {
+        inputFile: {
           url: downloadUrl, // Use original signed download URL directly
           verb: 'get'
         },
@@ -186,7 +186,7 @@ serve(async (req) => {
           url: transformsDataUrl,
           verb: 'get'
         },
-        outputRvt: {
+        outputFile: {
           url: outputSignedUrl,
           verb: 'put',
           headers: {
