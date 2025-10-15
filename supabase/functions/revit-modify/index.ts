@@ -116,8 +116,8 @@ serve(async (req) => {
     console.log('Got signed download URL for input file');
 
     // Step 4: Get aliases for Design Automation
-    const appBundleAlias = Deno.env.get('DA_APPBUNDLE_ALIAS') || `${clientId}.RevitTransformPluginFinal3+$LATEST`;
-    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivityFinal3+$LATEST`;
+    const appBundleAlias = Deno.env.get('DA_APPBUNDLE_ALIAS') || `${clientId}.RevitTransformPluginFinal3+1`;
+    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivityUpdated+1`;
     
     console.log('Using AppBundle:', appBundleAlias);
     console.log('Using Activity:', activityAlias);
