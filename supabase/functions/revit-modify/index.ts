@@ -149,13 +149,23 @@ serve(async (req) => {
 
     // Get signed URL for output file
     const outputObjectKey = 'output.rvt';
+    const minutesExpiration = 30;
     const outputSignedResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${outputObjectKey}/signeds3upload`,
-      { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
+      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${outputObjectKey}/signed?access=readwrite`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${twoLeggedToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          minutesExpiration: minutesExpiration
+        })
+      }
     );
     
     const outputSignedData = await outputSignedResponse.json();
-    const outputSignedUrl = outputSignedData.url;
+    const outputSignedUrl = outputSignedData.signedUrl;
     
     console.log('Output bucket and signed URL ready');
 
