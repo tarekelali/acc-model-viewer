@@ -117,7 +117,7 @@ serve(async (req) => {
 
     // Step 4: Get aliases for Design Automation
     const appBundleAlias = Deno.env.get('DA_APPBUNDLE_ALIAS') || `${clientId}.RevitTransformPlugin+prod`;
-    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.RevitTransformActivity+v1`;
+    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivityFinal2+prod`;
     
     console.log('Using AppBundle:', appBundleAlias);
     console.log('Using Activity:', activityAlias);
@@ -359,7 +359,7 @@ serve(async (req) => {
         attributes: {
           name: itemData.data.attributes.displayName,
           extension: {
-            type: 'versions:autodesk.bim360:File',
+            type: 'versions:autodesk.bim360:C4RModel',
             version: '1.0'
           }
         },
