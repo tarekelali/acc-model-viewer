@@ -86,32 +86,21 @@ serve(async (req) => {
     const downloadData = await storageResponse.json();
     const downloadUrl = downloadData.url;
     
-    console.log('Got download URL');
+    console.log('Got signed download URL for input file');
 
-    // Step 4: Download the Revit file
-    console.log('Step 4: Downloading Revit file...');
-    const fileResponse = await fetch(downloadUrl);
-    if (!fileResponse.ok) {
-      throw new Error(`Failed to download file: ${fileResponse.status}`);
-    }
-    
-    const fileBlob = await fileResponse.blob();
-    console.log('File downloaded, size:', fileBlob.size, 'bytes');
-
-    // Step 5: Get client ID and aliases for Design Automation
+    // Step 4: Get client ID and aliases for Design Automation
     const clientId = "UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY";
     const appBundleAlias = Deno.env.get('DA_APPBUNDLE_ALIAS') || `${clientId}.RevitTransformPlugin+prod`;
-    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivity+prod`;
+    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.TransformActivityFinal2+prod`;
     
     console.log('Using AppBundle:', appBundleAlias);
     console.log('Using Activity:', activityAlias);
 
-    // Step 6: Upload input file to OSS for Design Automation
-    console.log('Step 6: Uploading file to OSS...');
+    // Step 5: Create temporary bucket for output file only
+    console.log('Step 5: Creating temporary bucket for output...');
     
     const bucketKeyTemp = `revit_temp_${Date.now()}`;
     
-    // Create temporary bucket
     const createBucketResponse = await fetch(
       'https://developer.api.autodesk.com/oss/v2/buckets',
       {
@@ -132,36 +121,7 @@ serve(async (req) => {
       console.warn('Bucket creation warning:', errorText);
     }
 
-    // Upload input file
-    const inputObjectKey = 'input.rvt';
-    const uploadResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${inputObjectKey}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/octet-stream'
-        },
-        body: fileBlob
-      }
-    );
-
-    if (!uploadResponse.ok) {
-      throw new Error(`Failed to upload input file: ${uploadResponse.status}`);
-    }
-
-    const uploadDataResult = await uploadResponse.json();
-    console.log('Input file uploaded:', uploadDataResult.objectId);
-
-    // Get signed URLs for input and output
-    const inputSignedResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${inputObjectKey}/signeds3download`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
-    );
-    
-    const inputSignedData = await inputSignedResponse.json();
-    const inputSignedUrl = inputSignedData.url;
-
+    // Get signed URL for output file
     const outputObjectKey = 'output.rvt';
     const outputSignedResponse = await fetch(
       `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${outputObjectKey}/signeds3upload`,
@@ -170,9 +130,11 @@ serve(async (req) => {
     
     const outputSignedData = await outputSignedResponse.json();
     const outputSignedUrl = outputSignedData.url;
+    
+    console.log('Output bucket and signed URL ready');
 
-    // Step 7: Create WorkItem
-    console.log('Step 7: Creating Design Automation WorkItem...');
+    // Step 6: Create WorkItem
+    console.log('Step 6: Creating Design Automation WorkItem...');
     
     const transformsJson = JSON.stringify({ transforms });
     const transformsDataUrl = `data:application/json,${encodeURIComponent(transformsJson)}`;
@@ -181,7 +143,7 @@ serve(async (req) => {
       activityId: activityAlias,
       arguments: {
         inputRvt: {
-          url: inputSignedUrl,
+          url: downloadUrl, // Use original signed download URL directly
           verb: 'get'
         },
         transforms: {
@@ -229,8 +191,8 @@ serve(async (req) => {
     
     console.log('WorkItem created:', workItemId);
 
-    // Step 8: Poll for completion
-    console.log('Step 8: Polling for WorkItem completion...');
+    // Step 7: Poll for completion
+    console.log('Step 7: Polling for WorkItem completion...');
     
     let status = 'pending';
     let attempts = 0;
@@ -269,8 +231,8 @@ serve(async (req) => {
 
     console.log('WorkItem completed successfully!');
 
-    // Step 9: Download the modified file
-    console.log('Step 9: Downloading modified file...');
+    // Step 8: Download the modified file
+    console.log('Step 8: Downloading modified file...');
     
     const modifiedFileResponse = await fetch(
       `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${outputObjectKey}`,
@@ -284,8 +246,8 @@ serve(async (req) => {
     const modifiedFile = await modifiedFileResponse.blob();
     console.log('Modified file downloaded, size:', modifiedFile.size, 'bytes');
 
-    // Step 10: Upload modified file back to ACC storage
-    console.log('Step 10: Uploading modified file back to ACC...');
+    // Step 9: Upload modified file back to ACC storage
+    console.log('Step 9: Uploading modified file back to ACC...');
     
     const storagePayload = {
       jsonapi: { version: '1.0' },
@@ -351,8 +313,8 @@ serve(async (req) => {
 
     console.log('Modified file uploaded to ACC storage');
 
-    // Step 11: Create new version in ACC
-    console.log('Step 11: Creating new version in ACC...');
+    // Step 10: Create new version in ACC
+    console.log('Step 10: Creating new version in ACC...');
     
     const versionPayload = {
       jsonapi: { version: '1.0' },
