@@ -1,3 +1,4 @@
+// Updated: 2025-10-16 - Using Activity v3 with fixed AppBundle reference
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
