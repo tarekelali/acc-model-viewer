@@ -178,17 +178,19 @@ serve(async (req) => {
     const workItemPayload = {
       activityId: activityAlias,
       arguments: {
-        inputFile: {
+        inputRvt: {
           url: downloadUrl, // Use original signed download URL directly
           verb: 'get'
         },
         transforms: {
           url: transformsDataUrl,
-          verb: 'get'
+          verb: 'get',
+          localName: 'transforms.json'
         },
-        outputFile: {
+        outputRvt: {
           url: outputSignedUrl,
           verb: 'put',
+          localName: 'output.rvt',
           headers: {
             'Content-Type': 'application/octet-stream'
           }
