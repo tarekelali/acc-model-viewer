@@ -511,7 +511,7 @@ serve(async (req) => {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            minutesExpiration: 5
+            uploadKey: transformsKey
           })
         }
       );
