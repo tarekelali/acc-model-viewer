@@ -499,11 +499,11 @@ serve(async (req) => {
     const transformsJson = JSON.stringify({ transforms });
     const transformsKey = `transforms_${Date.now()}.json`;
 
-    // Step 1: Get signed upload URL from OSS
+    // Step 1: Get signed upload URL from OSS (using temporary bucket)
     let signedUploadResponse;
     try {
       signedUploadResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${transformsKey}/signeds3upload`,
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${transformsKey}/signeds3upload`,
         {
           method: 'POST',
           headers: {
@@ -588,7 +588,7 @@ serve(async (req) => {
     let transformsSignedResponse;
     try {
       transformsSignedResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${transformsKey}/signeds3download`,
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${transformsKey}/signeds3download`,
         {
           method: 'POST',
           headers: {
