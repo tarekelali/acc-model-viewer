@@ -493,11 +493,101 @@ serve(async (req) => {
 
     console.log('[STEP 5] ✓ Output bucket and signed URL ready');
 
-    // ========== STEP 6: CREATE WORKITEM ==========
-    console.log('[STEP 6] Creating Design Automation WorkItem...');
+    // ========== STEP 5.5: UPLOAD TRANSFORMS.JSON TO OSS ==========
+    console.log('[STEP 5.5] Uploading transforms.json to OSS...');
     
     const transformsJson = JSON.stringify({ transforms });
-    const transformsDataUrl = `data:application/json,${encodeURIComponent(transformsJson)}`;
+    const transformsKey = `transforms_${Date.now()}.json`;
+
+    let uploadTransformsResponse;
+    try {
+      uploadTransformsResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${transformsKey}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: transformsJson
+        }
+      );
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Network error while uploading transforms.json',
+        'Upload Transforms',
+        500,
+        { error: e instanceof Error ? e.message : String(e) }
+      );
+    }
+
+    if (!uploadTransformsResponse.ok) {
+      const errorData = await uploadTransformsResponse.text();
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to upload transforms.json to OSS',
+        'Upload Transforms',
+        uploadTransformsResponse.status,
+        { errorData, bucketKey, transformsKey }
+      );
+    }
+
+    console.log('[STEP 5.5] ✓ Transforms.json uploaded');
+
+    // Get signed read URL for transforms.json
+    console.log('[STEP 5.5] Getting signed read URL for transforms.json...');
+    
+    let transformsSignedResponse;
+    try {
+      transformsSignedResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${transformsKey}/signeds3download`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Network error while getting signed URL for transforms.json',
+        'Transforms Signed URL',
+        500,
+        { error: e instanceof Error ? e.message : String(e) }
+      );
+    }
+
+    if (!transformsSignedResponse.ok) {
+      const errorData = await transformsSignedResponse.text();
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to get signed URL for transforms.json',
+        'Transforms Signed URL',
+        transformsSignedResponse.status,
+        { errorData, bucketKey, transformsKey }
+      );
+    }
+
+    const transformsSignedData = await transformsSignedResponse.json();
+    const transformsUrl = transformsSignedData.signedUrl;
+
+    if (!transformsUrl) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'No signed URL in transforms response',
+        'Transforms Signed URL',
+        500,
+        { transformsSignedData }
+      );
+    }
+
+    console.log('[STEP 5.5] ✓ Transforms signed URL ready');
+
+    // ========== STEP 6: CREATE WORKITEM ==========
+    console.log('[STEP 6] Creating Design Automation WorkItem...');
 
     const workItemPayload = {
       activityId: activityAlias,
@@ -507,7 +597,7 @@ serve(async (req) => {
           verb: 'get'
         },
         transforms: {
-          url: transformsDataUrl,
+          url: transformsUrl,
           verb: 'get',
           localName: 'transforms.json'
         },
