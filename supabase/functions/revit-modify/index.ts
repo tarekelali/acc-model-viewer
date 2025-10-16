@@ -494,46 +494,93 @@ serve(async (req) => {
     console.log('[STEP 5] ✓ Output bucket and signed URL ready');
 
     // ========== STEP 5.5: UPLOAD TRANSFORMS.JSON TO OSS ==========
-    console.log('[STEP 5.5] Uploading transforms.json to OSS...');
+    console.log('[STEP 5.5] Uploading transforms.json to OSS using S3-signed URL...');
     
     const transformsJson = JSON.stringify({ transforms });
     const transformsKey = `transforms_${Date.now()}.json`;
 
-    let uploadTransformsResponse;
+    // Step 1: Get signed upload URL from OSS
+    let signedUploadResponse;
     try {
-      uploadTransformsResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${transformsKey}`,
+      signedUploadResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${transformsKey}/signeds3upload`,
         {
-          method: 'PUT',
+          method: 'POST',
           headers: {
             'Authorization': `Bearer ${twoLeggedToken}`,
             'Content-Type': 'application/json'
           },
-          body: transformsJson
+          body: JSON.stringify({
+            minutesExpiration: 5
+          })
         }
       );
     } catch (e) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Network error while uploading transforms.json',
-        'Upload Transforms',
+        'Network error while getting signed upload URL for transforms.json',
+        'Get Signed Upload URL',
         500,
         { error: e instanceof Error ? e.message : String(e) }
       );
     }
 
-    if (!uploadTransformsResponse.ok) {
-      const errorData = await uploadTransformsResponse.text();
+    if (!signedUploadResponse.ok) {
+      const errorData = await signedUploadResponse.text();
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Failed to upload transforms.json to OSS',
-        'Upload Transforms',
-        uploadTransformsResponse.status,
+        'Failed to get signed upload URL for transforms.json',
+        'Get Signed Upload URL',
+        signedUploadResponse.status,
         { errorData, bucketKey, transformsKey }
       );
     }
 
-    console.log('[STEP 5.5] ✓ Transforms.json uploaded');
+    const signedUploadData = await signedUploadResponse.json();
+    const uploadUrl = signedUploadData.uploadUrl;
+
+    if (!uploadUrl) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'No upload URL in signed upload response',
+        'Get Signed Upload URL',
+        500,
+        { signedUploadData }
+      );
+    }
+
+    // Step 2: Upload directly to S3 using signed URL
+    let s3UploadResponse;
+    try {
+      s3UploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: transformsJson
+      });
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Network error while uploading to S3',
+        'S3 Upload',
+        500,
+        { error: e instanceof Error ? e.message : String(e) }
+      );
+    }
+
+    if (!s3UploadResponse.ok) {
+      const errorData = await s3UploadResponse.text();
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to upload transforms.json to S3',
+        'S3 Upload',
+        s3UploadResponse.status,
+        { errorData, bucketKey, transformsKey }
+      );
+    }
+
+    console.log('[STEP 5.5] ✓ Transforms.json uploaded to S3');
 
     // Get signed read URL for transforms.json
     console.log('[STEP 5.5] Getting signed read URL for transforms.json...');
