@@ -500,53 +500,60 @@ serve(async (req) => {
     const transformsJson = JSON.stringify({ transforms });
     const transformsKey = `transforms_${Date.now()}.json`;
 
-    // Step 1: Get signed upload URL using GET method
-    let signedUploadResponse;
+    // Use batch signed S3 upload API
+    let batchUploadResponse;
     try {
-      signedUploadResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${transformsKey}/signeds3upload`,
+      batchUploadResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/batchsigneds3upload`,
         {
-          method: 'GET',
+          method: 'POST',
           headers: {
-            'Authorization': `Bearer ${twoLeggedToken}`
-          }
+            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            requests: [{
+              objectKey: transformsKey
+            }]
+          })
         }
       );
     } catch (e) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Network error while getting signed upload URL for transforms.json',
-        'Get Signed Upload URL',
+        'Network error while getting batch upload URLs',
+        'Batch Upload Request',
         500,
         { error: e instanceof Error ? e.message : String(e) }
       );
     }
 
-    if (!signedUploadResponse.ok) {
-      const errorData = await signedUploadResponse.text();
+    if (!batchUploadResponse.ok) {
+      const errorData = await batchUploadResponse.text();
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Failed to get signed upload URL for transforms.json',
-        'Get Signed Upload URL',
-        signedUploadResponse.status,
+        'Failed to get batch upload URLs',
+        'Batch Upload Request',
+        batchUploadResponse.status,
         { errorData, bucketKey: bucketKeyTemp, transformsKey }
       );
     }
 
-    const signedUploadData = await signedUploadResponse.json();
-    const uploadUrl = signedUploadData.urls?.[0] || signedUploadData.uploadUrl;
-
-    if (!uploadUrl) {
+    const batchData = await batchUploadResponse.json();
+    const uploadInfo = batchData.results?.[transformsKey];
+    
+    if (!uploadInfo || !uploadInfo.urls || uploadInfo.urls.length === 0) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'No upload URL in signed upload response',
-        'Get Signed Upload URL',
+        'No upload URLs in batch response',
+        'Batch Upload Request',
         500,
-        { signedUploadData }
+        { batchData }
       );
     }
 
-    // Step 2: Upload transforms.json to S3 using signed URL
+    // Upload to S3
+    const uploadUrl = uploadInfo.urls[0];
     let s3UploadResponse;
     try {
       s3UploadResponse = await fetch(uploadUrl, {
@@ -559,7 +566,7 @@ serve(async (req) => {
     } catch (e) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Network error while uploading to S3',
+        'Network error uploading to S3',
         'S3 Upload',
         500,
         { error: e instanceof Error ? e.message : String(e) }
@@ -567,21 +574,59 @@ serve(async (req) => {
     }
 
     if (!s3UploadResponse.ok) {
-      const errorData = await s3UploadResponse.text();
+      const errorText = await s3UploadResponse.text();
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Failed to upload transforms.json to S3',
+        'Failed to upload transforms to S3',
         'S3 Upload',
         s3UploadResponse.status,
-        { errorData, bucketKey: bucketKeyTemp, transformsKey }
+        { response: errorText }
       );
     }
 
-    console.log('[STEP 5.5] ✓ Transforms.json uploaded to S3');
+    // Complete upload
+    let completeResponse;
+    try {
+      completeResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/batchcompleteupload`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            requests: [{
+              objectKey: transformsKey,
+              uploadKey: uploadInfo.uploadKey
+            }]
+          })
+        }
+      );
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Network error completing upload',
+        'Complete Upload',
+        500,
+        { error: e instanceof Error ? e.message : String(e) }
+      );
+    }
 
-    // Step 3: Get signed download URL for transforms.json (for WorkItem to read)
-    console.log('[STEP 5.5] Getting signed read URL for transforms.json...');
-    
+    if (!completeResponse.ok) {
+      const errorText = await completeResponse.text();
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to complete upload',
+        'Complete Upload',
+        completeResponse.status,
+        { response: errorText }
+      );
+    }
+
+    console.log('[STEP 5.5] ✓ transforms.json uploaded');
+
+    // Get download URL
     let transformsSignedResponse;
     try {
       transformsSignedResponse = await fetch(
@@ -597,34 +642,34 @@ serve(async (req) => {
     } catch (e) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Network error while getting signed URL for transforms.json',
-        'Transforms Signed URL',
+        'Network error getting download URL',
+        'Get Download URL',
         500,
         { error: e instanceof Error ? e.message : String(e) }
       );
     }
 
     if (!transformsSignedResponse.ok) {
-      const errorData = await transformsSignedResponse.text();
+      const errorText = await transformsSignedResponse.text();
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Failed to get signed URL for transforms.json',
-        'Transforms Signed URL',
+        'Failed to get download URL',
+        'Get Download URL',
         transformsSignedResponse.status,
-        { errorData, bucketKey: bucketKeyTemp, transformsKey }
+        { response: errorText }
       );
     }
 
-    const transformsSignedData = await transformsSignedResponse.json();
-    const transformsUrl = transformsSignedData.signedUrl;
+    const transformsData = await transformsSignedResponse.json();
+    const transformsUrl = transformsData.signedUrl;
 
     if (!transformsUrl) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'No signed URL in transforms response',
-        'Transforms Signed URL',
+        'No download URL in response',
+        'Get Download URL',
         500,
-        { transformsSignedData }
+        { transformsData }
       );
     }
 
