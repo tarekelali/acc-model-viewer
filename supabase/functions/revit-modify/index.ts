@@ -61,6 +61,30 @@ function createErrorResponse(
 }
 
 serve(async (req) => {
+  // 🔥🔥🔥 EDGE FUNCTION REACHED - UNCONDITIONAL LOGGING 🔥🔥🔥
+  console.log('🔥🔥🔥 EDGE FUNCTION REACHED AT:', new Date().toISOString());
+  
+  // 🚨🚨🚨 LOG ALL HEADERS IMMEDIATELY 🚨🚨🚨
+  const allHeaders: Record<string, string> = {};
+  req.headers.forEach((value, key) => {
+    allHeaders[key] = value;
+  });
+  console.log('🚨🚨🚨 ALL INCOMING HEADERS:', JSON.stringify(allHeaders, null, 2));
+  
+  // Check for Authorization header (case-insensitive)
+  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
+  const customAuthHeader = req.headers.get('x-custom-authorization') || req.headers.get('X-Custom-Authorization');
+  
+  console.log('🔍 Authorization header found:', !!authHeader);
+  console.log('🔍 x-custom-authorization header found:', !!customAuthHeader);
+  
+  if (authHeader) {
+    console.log('✅ Authorization header present (first 20 chars):', authHeader.substring(0, 20));
+  }
+  if (customAuthHeader) {
+    console.log('✅ x-custom-authorization header present (first 20 chars):', customAuthHeader.substring(0, 20));
+  }
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -85,8 +109,14 @@ serve(async (req) => {
 
     const { token, projectId, itemId, transforms } = requestBody;
     
+    // Use token from body, or fallback to headers
+    const effectiveToken = token || customAuthHeader || authHeader?.replace('Bearer ', '');
+    
     console.log('[INPUT] Request parameters:', {
-      hasToken: !!token,
+      hasTokenInBody: !!token,
+      hasAuthHeader: !!authHeader,
+      hasCustomAuthHeader: !!customAuthHeader,
+      hasEffectiveToken: !!effectiveToken,
       projectId,
       itemId,
       transformCount: transforms?.length,
@@ -94,10 +124,10 @@ serve(async (req) => {
     });
 
     // Validate required fields
-    if (!token) {
+    if (!effectiveToken) {
       return createErrorResponse(
         ErrorType.VALIDATION_ERROR,
-        'Missing authentication token',
+        'Missing authentication token (checked body, Authorization header, and x-custom-authorization header)',
         'Input Validation',
         400
       );
@@ -219,7 +249,7 @@ serve(async (req) => {
     try {
       itemResponse = await fetch(
         `https://developer.api.autodesk.com/data/v1/projects/b.${projectId}/items/${itemId}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+        { headers: { 'Authorization': `Bearer ${effectiveToken}` } }
       );
     } catch (e) {
       return createErrorResponse(
@@ -264,7 +294,7 @@ serve(async (req) => {
     try {
       versionResponse = await fetch(
         `https://developer.api.autodesk.com/data/v1/projects/b.${projectId}/versions/${encodeURIComponent(tipVersionId)}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+        { headers: { 'Authorization': `Bearer ${effectiveToken}` } }
       );
     } catch (e) {
       return createErrorResponse(
@@ -316,7 +346,7 @@ serve(async (req) => {
     try {
       storageResponse = await fetch(
         `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${objectKey}/signeds3download`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+        { headers: { 'Authorization': `Bearer ${effectiveToken}` } }
       );
     } catch (e) {
       return createErrorResponse(
@@ -930,7 +960,7 @@ serve(async (req) => {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${effectiveToken}`,
             'Content-Type': 'application/vnd.api+json'
           },
           body: JSON.stringify(storagePayload)
@@ -985,7 +1015,7 @@ serve(async (req) => {
         {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${effectiveToken}`,
             'Content-Type': 'application/octet-stream'
           },
           body: modifiedFile
@@ -1052,7 +1082,7 @@ serve(async (req) => {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${effectiveToken}`,
             'Content-Type': 'application/vnd.api+json'
           },
           body: JSON.stringify(versionPayload)
