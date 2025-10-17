@@ -64,6 +64,8 @@ const Viewer = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [currentItemId, setCurrentItemId] = useState<string | null>(null);
+  const [currentFolderUrn, setCurrentFolderUrn] = useState<string | null>(null);
+  const [currentVersionUrn, setCurrentVersionUrn] = useState<string | null>(null);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   
   // Helper to extract project ID from URL or return as-is
@@ -244,6 +246,7 @@ const Viewer = () => {
       const folderMatch = input.match(/folderUrn=([^&]+)/);
       if (folderMatch) {
         folderUrn = decodeURIComponent(folderMatch[1]);
+        setCurrentFolderUrn(folderUrn);
       }
       
       const entityMatch = input.match(/entityId=([^&]+)/);
@@ -309,6 +312,7 @@ const Viewer = () => {
       }
 
       console.log('Version URN:', tipVersionUrn);
+      setCurrentVersionUrn(tipVersionUrn);
       
       // Base64 encode the version URN for the viewer
       // Convert to base64 using btoa (browser's built-in function)
@@ -778,34 +782,45 @@ const Viewer = () => {
     setShowSaveDialog(false);
     
     try {
-      if (!currentProjectId || !currentItemId) {
-        throw new Error('No model loaded - project or item ID missing');
+      // Validate required URNs
+      if (!currentVersionUrn) {
+        throw new Error('No Revit file version loaded');
+      }
+      if (!currentProjectId) {
+        throw new Error('No project ID available');
+      }
+      if (!currentFolderUrn) {
+        throw new Error('No folder URN available');
       }
 
       toast('Initiating save to Revit file...');
 
-      // Call Design Automation edge function
+      // Transform pendingChanges array into Cursor's expected object format
+      const transformsObject: Record<string, { translation: { x: number; y: number; z: number } }> = {};
+
+      pendingChanges.forEach(change => {
+        // Calculate translation delta (difference between new and original positions)
+        const deltaX = change.newPosition.x - change.originalPosition.x;
+        const deltaY = change.newPosition.y - change.originalPosition.y;
+        const deltaZ = change.newPosition.z - change.originalPosition.z;
+        
+        // Use uniqueId as key, translation delta as value (in feet)
+        transformsObject[change.uniqueId] = {
+          translation: {
+            x: deltaX,
+            y: deltaY,
+            z: deltaZ
+          }
+        };
+      });
+
+      // Call Cursor's revit-modify endpoint with correct format
       const { data, error } = await supabase.functions.invoke('revit-modify', {
         body: {
-          token: accessToken,
+          revitFileUrn: currentVersionUrn,
           projectId: currentProjectId,
-          itemId: currentItemId,
-          transforms: pendingChanges.map(change => ({
-            dbId: change.dbId,
-            uniqueId: change.uniqueId,
-            elementName: change.elementName,
-            // Convert from feet to inches (multiply by 12)
-            originalPosition: {
-              x: change.originalPosition.x * 12,
-              y: change.originalPosition.y * 12,
-              z: change.originalPosition.z * 12
-            },
-            newPosition: {
-              x: change.newPosition.x * 12,
-              y: change.newPosition.y * 12,
-              z: change.newPosition.z * 12
-            }
-          }))
+          folderUrn: currentFolderUrn,
+          transforms: transformsObject
         }
       });
 
