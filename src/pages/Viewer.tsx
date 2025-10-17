@@ -837,6 +837,12 @@ const Viewer = () => {
       });
 
       if (error) {
+        // Log the full error response for debugging
+        console.error('Edge function error response:', JSON.stringify({
+          message: error.message,
+          status: error.status,
+          details: error,
+        }, null, 2));
         throw error;
       }
 
