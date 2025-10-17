@@ -8,6 +8,7 @@ const corsHeaders = {
 
 interface Transform {
   dbId: number;
+  uniqueId: string;  // Revit UniqueId (GUID)
   elementName: string;
   originalPosition: { x: number; y: number; z: number };
   newPosition: { x: number; y: number; z: number };

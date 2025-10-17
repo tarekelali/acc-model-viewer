@@ -56,6 +56,7 @@ const Viewer = () => {
   const [editMode, setEditMode] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Array<{
     dbId: number;
+    uniqueId: string;  // Revit UniqueId (GUID)
     originalPosition: { x: number; y: number; z: number };
     newPosition: { x: number; y: number; z: number };
     elementName: string;
@@ -657,15 +658,33 @@ const Viewer = () => {
               z: this.originalPosition.z + this.accumulatedOffset.z
             };
             
-            // Get element name
+            // Get element properties including UniqueId
             viewer.model.getProperties(dbId, (result: any) => {
               const elementName = result.name || `Element ${dbId}`;
               
-              // Add to pending changes
+              // Extract UniqueId (Revit GUID) from properties
+              let uniqueId = null;
+              if (result.externalId) {
+                uniqueId = result.externalId;
+              } else if (result.properties) {
+                const uniqueIdProp = result.properties.find(
+                  (p: any) => p.attributeName === 'UniqueId' || p.displayName === 'UniqueId'
+                );
+                if (uniqueIdProp) {
+                  uniqueId = uniqueIdProp.displayValue;
+                }
+              }
+              
+              if (!uniqueId) {
+                console.warn(`No UniqueId found for element ${dbId}, using dbId as fallback`);
+              }
+              
+              // Add to pending changes with UniqueId
               setPendingChanges((prev: any) => {
                 const existing = prev.findIndex((c: any) => c.dbId === dbId);
                 const change = {
                   dbId,
+                  uniqueId: uniqueId || `fallback-${dbId}`,
                   originalPosition: this.originalPosition,
                   newPosition: newPos,
                   elementName
@@ -773,9 +792,19 @@ const Viewer = () => {
           itemId: currentItemId,
           transforms: pendingChanges.map(change => ({
             dbId: change.dbId,
+            uniqueId: change.uniqueId,
             elementName: change.elementName,
-            originalPosition: change.originalPosition,
-            newPosition: change.newPosition
+            // Convert from feet to inches (multiply by 12)
+            originalPosition: {
+              x: change.originalPosition.x * 12,
+              y: change.originalPosition.y * 12,
+              z: change.originalPosition.z * 12
+            },
+            newPosition: {
+              x: change.newPosition.x * 12,
+              y: change.newPosition.y * 12,
+              z: change.newPosition.z * 12
+            }
           }))
         }
       });
