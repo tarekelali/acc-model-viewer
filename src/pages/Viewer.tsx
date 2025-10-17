@@ -832,23 +832,32 @@ const Viewer = () => {
       }, null, 2));
 
       // Call Cursor's revit-modify endpoint with correct format
-      const { data, error } = await supabase.functions.invoke('revit-modify', {
-        body: requestPayload
-      });
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/revit-modify`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify(requestPayload),
+          }
+        );
 
-      if (error) {
-        // Log the full error response for debugging
-        console.error('Edge function error response:', JSON.stringify({
-          message: error.message,
-          status: error.status,
-          details: error,
-        }, null, 2));
-        throw error;
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error('Edge function returned error response:', JSON.stringify(result, null, 2));
+          throw new Error(result.error || 'Unknown edge function error');
+        }
+
+        console.log('Design Automation response:', result);
+        toast.success(`Changes saved! ${pendingChanges.length} elements modified`);
+      } catch (err) {
+        console.error('Fetch error:', err);
+        throw err;
       }
-
-      console.log('Design Automation response:', data);
-
-      toast.success(`Changes saved! ${pendingChanges.length} elements modified`);
       
       // Clear pending changes
       setPendingChanges([]);
