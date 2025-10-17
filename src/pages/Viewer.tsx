@@ -835,15 +835,31 @@ const Viewer = () => {
       try {
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
         
+        // Debug: Verify the anon key is loaded
+        console.log('VITE_SUPABASE_PUBLISHABLE_KEY available:', !!supabaseAnonKey);
+        console.log('VITE_SUPABASE_PUBLISHABLE_KEY value (first 20 chars):', supabaseAnonKey?.substring(0, 20));
+        
+        if (!supabaseAnonKey) {
+          throw new Error('VITE_SUPABASE_PUBLISHABLE_KEY is not available in environment');
+        }
+        
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'apikey': supabaseAnonKey,
+        };
+        
+        console.log('Request headers:', JSON.stringify({
+          'Content-Type': headers['Content-Type'],
+          'Authorization': `Bearer ${supabaseAnonKey.substring(0, 20)}...`,
+          'apikey': `${supabaseAnonKey.substring(0, 20)}...`,
+        }, null, 2));
+        
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/revit-modify`,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseAnonKey}`,
-              'apikey': supabaseAnonKey,
-            },
+            headers,
             body: JSON.stringify(requestPayload),
           }
         );
