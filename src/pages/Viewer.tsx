@@ -819,7 +819,7 @@ const Viewer = () => {
         revitFileUrn: currentVersionUrn,
         projectId: currentProjectId,
         folderUrn: currentFolderUrn,
-        transforms: transformsObject
+        transforms: JSON.stringify(transformsObject)
       };
 
       // Log the full request payload for debugging
