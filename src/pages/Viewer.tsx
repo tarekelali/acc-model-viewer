@@ -823,13 +823,13 @@ const Viewer = () => {
       };
 
       // Log the full request payload for debugging
-      console.log('Sending to revit-modify:', {
+      console.log('Sending to revit-modify:', JSON.stringify({
         revitFileUrn: requestPayload.revitFileUrn,
         projectId: requestPayload.projectId,
         folderUrn: requestPayload.folderUrn,
         transformCount: Object.keys(requestPayload.transforms).length,
         transforms: requestPayload.transforms
-      });
+      }, null, 2));
 
       // Call Cursor's revit-modify endpoint with correct format
       const { data, error } = await supabase.functions.invoke('revit-modify', {
