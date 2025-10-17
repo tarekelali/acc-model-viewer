@@ -834,10 +834,12 @@ const Viewer = () => {
       // Call Cursor's revit-modify endpoint with correct format
       try {
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        const endpointUrl = 'https://mbkfbmsjwlgqyzhfjwka.supabase.co/functions/v1/revit-modify';
         
         // Debug: Verify the anon key is loaded
         console.log('VITE_SUPABASE_PUBLISHABLE_KEY available:', !!supabaseAnonKey);
         console.log('VITE_SUPABASE_PUBLISHABLE_KEY value (first 20 chars):', supabaseAnonKey?.substring(0, 20));
+        console.log('Endpoint URL:', endpointUrl);
         
         if (!supabaseAnonKey) {
           throw new Error('VITE_SUPABASE_PUBLISHABLE_KEY is not available in environment');
@@ -855,14 +857,11 @@ const Viewer = () => {
           'apikey': `${supabaseAnonKey.substring(0, 20)}...`,
         }, null, 2));
         
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/revit-modify`,
-          {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(requestPayload),
-          }
-        );
+        const response = await fetch(endpointUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestPayload),
+        });
 
         const result = await response.json();
 
