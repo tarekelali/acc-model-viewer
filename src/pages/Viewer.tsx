@@ -814,14 +814,26 @@ const Viewer = () => {
         };
       });
 
+      // Prepare request payload
+      const requestPayload = {
+        revitFileUrn: currentVersionUrn,
+        projectId: currentProjectId,
+        folderUrn: currentFolderUrn,
+        transforms: transformsObject
+      };
+
+      // Log the full request payload for debugging
+      console.log('Sending to revit-modify:', {
+        revitFileUrn: requestPayload.revitFileUrn,
+        projectId: requestPayload.projectId,
+        folderUrn: requestPayload.folderUrn,
+        transformCount: Object.keys(requestPayload.transforms).length,
+        transforms: requestPayload.transforms
+      });
+
       // Call Cursor's revit-modify endpoint with correct format
       const { data, error } = await supabase.functions.invoke('revit-modify', {
-        body: {
-          revitFileUrn: currentVersionUrn,
-          projectId: currentProjectId,
-          folderUrn: currentFolderUrn,
-          transforms: transformsObject
-        }
+        body: requestPayload
       });
 
       if (error) {
