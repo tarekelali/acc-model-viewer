@@ -370,8 +370,10 @@ serve(async (req) => {
     
     let storageResponse;
     try {
+      // URL-encode the object key to handle special characters (e.g., .rvt extension)
+      const encodedObjectKey = encodeURIComponent(objectKey);
       storageResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${objectKey}/signeds3download`,
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${encodedObjectKey}/signeds3download`,
         { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
       );
     } catch (e) {
