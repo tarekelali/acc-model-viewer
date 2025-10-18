@@ -107,10 +107,22 @@ serve(async (req) => {
       );
     }
 
-    const { token, projectId, itemId, transforms } = requestBody;
+    const { token, projectId, itemId, folderUrn, transforms } = requestBody;
     
     // Use token from body, or fallback to headers
     const effectiveToken = token || customAuthHeader || authHeader?.replace('Bearer ', '');
+    
+    // Log incoming request fields
+    console.log('📥 Request data fields:', {
+      hasToken: !!token,
+      hasProjectId: !!projectId,
+      hasItemId: !!itemId,
+      hasFolderUrn: !!folderUrn,
+      hasTransforms: !!transforms,
+      transformsType: typeof transforms,
+      transformsKeys: transforms ? Object.keys(transforms) : [],
+      allFieldNames: Object.keys(requestBody)
+    });
     
     console.log('[INPUT] Request parameters:', {
       hasTokenInBody: !!token,
@@ -119,7 +131,8 @@ serve(async (req) => {
       hasEffectiveToken: !!effectiveToken,
       projectId,
       itemId,
-      transformCount: transforms?.length,
+      folderUrn,
+      transformCount: transforms ? Object.keys(transforms).length : 0,
       timestamp: new Date().toISOString()
     });
 
@@ -151,26 +164,39 @@ serve(async (req) => {
       );
     }
 
-    if (!transforms || !Array.isArray(transforms) || transforms.length === 0) {
+    // Validate transforms as object/map (not array)
+    if (!transforms || typeof transforms !== 'object' || Array.isArray(transforms)) {
       return createErrorResponse(
         ErrorType.VALIDATION_ERROR,
-        'Missing or empty transforms array',
+        'transforms must be a non-empty object/map',
+        'Input Validation',
+        400,
+        { receivedTransforms: transforms, receivedType: typeof transforms }
+      );
+    }
+
+    const transformKeys = Object.keys(transforms);
+    if (transformKeys.length === 0) {
+      return createErrorResponse(
+        ErrorType.VALIDATION_ERROR,
+        'transforms object is empty',
         'Input Validation',
         400,
         { receivedTransforms: transforms }
       );
     }
 
-    // Validate transform structure
-    for (let i = 0; i < transforms.length; i++) {
-      const t = transforms[i];
-      if (!t.dbId || !t.elementName || !t.originalPosition || !t.newPosition) {
+    // Validate transform structure (each element should have translation)
+    for (const elementId of transformKeys) {
+      const t = transforms[elementId];
+      if (!t.translation || typeof t.translation.x !== 'number' || 
+          typeof t.translation.y !== 'number' || typeof t.translation.z !== 'number') {
         return createErrorResponse(
           ErrorType.VALIDATION_ERROR,
-          `Invalid transform structure at index ${i}`,
+          `Invalid transform structure for element ${elementId}`,
           'Input Validation',
           400,
-          { transform: t }
+          { elementId, transform: t }
         );
       }
     }
