@@ -814,8 +814,9 @@ const Viewer = () => {
         };
       });
 
-      // Prepare request payload
+      // Prepare request payload with Autodesk token
       const requestPayload = {
+        token: accessToken, // Autodesk access token for ACC API calls
         itemId: currentItemId,
         projectId: currentProjectId,
         folderUrn: currentFolderUrn,
@@ -824,6 +825,7 @@ const Viewer = () => {
 
       // Log the full request payload for debugging
       console.log('Sending to revit-modify:', JSON.stringify({
+        hasToken: !!accessToken,
         itemId: requestPayload.itemId,
         projectId: requestPayload.projectId,
         folderUrn: requestPayload.folderUrn,
@@ -836,18 +838,22 @@ const Viewer = () => {
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
         const endpointUrl = 'https://mbkfbmsjwlgqyzhfjwka.supabase.co/functions/v1/revit-modify';
         
-        // Debug: Verify the anon key is loaded
+        // Debug: Verify keys are loaded
         console.log('VITE_SUPABASE_PUBLISHABLE_KEY available:', !!supabaseAnonKey);
-        console.log('VITE_SUPABASE_PUBLISHABLE_KEY value (first 20 chars):', supabaseAnonKey?.substring(0, 20));
+        console.log('Autodesk access token available:', !!accessToken);
         console.log('Endpoint URL:', endpointUrl);
         
         if (!supabaseAnonKey) {
           throw new Error('VITE_SUPABASE_PUBLISHABLE_KEY is not available in environment');
         }
         
+        if (!accessToken) {
+          throw new Error('Autodesk access token is not available');
+        }
+        
         const headers = {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Authorization': `Bearer ${supabaseAnonKey}`, // For edge function auth
           'apikey': supabaseAnonKey,
         };
         
