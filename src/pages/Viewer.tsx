@@ -819,7 +819,7 @@ const Viewer = () => {
         itemId: currentItemId,
         projectId: currentProjectId,
         folderUrn: currentFolderUrn,
-        transforms: JSON.stringify(transformsObject)
+        transforms: transformsObject
       };
 
       // Log the full request payload for debugging
@@ -827,8 +827,8 @@ const Viewer = () => {
         itemId: requestPayload.itemId,
         projectId: requestPayload.projectId,
         folderUrn: requestPayload.folderUrn,
-        transformCount: Object.keys(requestPayload.transforms).length,
-        transforms: requestPayload.transforms
+        transformCount: Object.keys(transformsObject).length,
+        firstTransform: Object.values(transformsObject)[0]
       }, null, 2));
 
       // Call Cursor's revit-modify endpoint with correct format
