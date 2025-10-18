@@ -372,7 +372,7 @@ serve(async (req) => {
     try {
       storageResponse = await fetch(
         `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${objectKey}/signeds3download`,
-        { headers: { 'Authorization': `Bearer ${effectiveToken}` } }
+        { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
       );
     } catch (e) {
       return createErrorResponse(
