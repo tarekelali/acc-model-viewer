@@ -816,7 +816,7 @@ const Viewer = () => {
 
       // Prepare request payload
       const requestPayload = {
-        revitFileUrn: currentVersionUrn,
+        itemId: currentItemId,
         projectId: currentProjectId,
         folderUrn: currentFolderUrn,
         transforms: JSON.stringify(transformsObject)
@@ -824,7 +824,7 @@ const Viewer = () => {
 
       // Log the full request payload for debugging
       console.log('Sending to revit-modify:', JSON.stringify({
-        revitFileUrn: requestPayload.revitFileUrn,
+        itemId: requestPayload.itemId,
         projectId: requestPayload.projectId,
         folderUrn: requestPayload.folderUrn,
         transformCount: Object.keys(requestPayload.transforms).length,
