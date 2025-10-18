@@ -828,7 +828,7 @@ const Viewer = () => {
         projectId: requestPayload.projectId,
         folderUrn: requestPayload.folderUrn,
         transformCount: Object.keys(transformsObject).length,
-        firstTransform: Object.values(transformsObject)[0]
+        transforms: transformsObject
       }, null, 2));
 
       // Call Cursor's revit-modify endpoint with correct format
