@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// SECURITY: Whitelist of allowed project IDs
+const ALLOWED_PROJECT_ID = 'd27a6383-5881-4756-9cff-3deccd318427';
+
 interface Transform {
   dbId: number;
   uniqueId: string;  // Revit UniqueId (GUID)
@@ -154,6 +157,20 @@ serve(async (req) => {
         400
       );
     }
+
+    // SECURITY: Validate project ID against whitelist
+    const cleanProjectId = projectId.replace('b.', '');
+    if (cleanProjectId !== ALLOWED_PROJECT_ID) {
+      console.error(`[SECURITY] Access denied: Project ${cleanProjectId} not in whitelist (allowed: ${ALLOWED_PROJECT_ID})`);
+      return createErrorResponse(
+        ErrorType.AUTH_ERROR,
+        `Access denied: This project is not authorized. Only project ${ALLOWED_PROJECT_ID} is allowed.`,
+        'Security Validation',
+        403,
+        { requestedProject: cleanProjectId, allowedProject: ALLOWED_PROJECT_ID }
+      );
+    }
+    console.log(`[SECURITY] ✅ Project ${cleanProjectId} validated against whitelist`);
 
     if (!itemId) {
       return createErrorResponse(

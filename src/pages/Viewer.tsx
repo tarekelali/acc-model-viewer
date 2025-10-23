@@ -37,8 +37,8 @@ interface Project {
 }
 
 const Viewer = () => {
-  // Target project to prioritize
-  const TARGET_PROJECT_ID = "d27a6383-5881-4756-9cff-3deccd318427";
+  // SECURITY: Whitelist - only allow this project
+  const ALLOWED_PROJECT_ID = "d27a6383-5881-4756-9cff-3deccd318427";
   
   // Hardcoded trial model URL
   const TRIAL_MODEL_URL = "https://acc.autodesk.com/docs/files/projects/d27a6383-5881-4756-9cff-3deccd318427?folderUrn=urn%3Aadsk.wipprod%3Afs.folder%3Aco.pTXcoJRjSkuopE4nj1Y-yA&entityId=urn%3Aadsk.wipprod%3Adm.lineage%3AGHgronViQjKVtKfVIp91Vg&viewModel=detail&moduleId=folders&viewableGuid=f45222b7-9a71-d2d4-9674-a73d51f2c767";
@@ -145,28 +145,22 @@ const Viewer = () => {
       
       const allProjects = data.data || [];
       
-      // Sort projects to put target project first
-      const sortedProjects = allProjects.sort((a: Project, b: Project) => {
-        const aId = a.id.replace('b.', '');
-        const bId = b.id.replace('b.', '');
-        
-        if (aId === TARGET_PROJECT_ID) return -1;
-        if (bId === TARGET_PROJECT_ID) return 1;
-        return 0;
-      });
-      
-      setProjects(sortedProjects);
-      toast.success(`Loaded ${sortedProjects.length} projects`);
-      
-      // Auto-load target project if found
-      const targetProject = sortedProjects.find((p: Project) => 
-        p.id.replace('b.', '') === TARGET_PROJECT_ID
+      // SECURITY: Frontend should only show whitelisted project
+      const whitelistedProjects = allProjects.filter((p: Project) => 
+        p.id.replace('b.', '') === ALLOWED_PROJECT_ID
       );
       
-      if (targetProject) {
-        console.log('Auto-loading trial model:', targetProject.attributes.name);
-        setTimeout(() => loadModel(TRIAL_MODEL_URL), 1000);
+      if (whitelistedProjects.length === 0) {
+        toast.error('No authorized projects found');
+        return;
       }
+      
+      setProjects(whitelistedProjects);
+      toast.success('Project loaded');
+      
+      // Auto-load the whitelisted project
+      console.log('Auto-loading authorized project');
+      setTimeout(() => loadModel(TRIAL_MODEL_URL), 1000);
     } catch (error) {
       console.error('Error fetching projects:', error);
       toast.error(`Failed to load projects: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -236,6 +230,14 @@ const Viewer = () => {
 
   const loadModel = async (input: string) => {
     const projectId = extractProjectId(input);
+    
+    // SECURITY: Validate project ID on frontend
+    if (projectId !== ALLOWED_PROJECT_ID) {
+      toast.error(`Access denied: Only project ${ALLOWED_PROJECT_ID} is authorized`);
+      console.error('Security: Attempted to load unauthorized project:', projectId);
+      return;
+    }
+    
     setCurrentProjectId(projectId);
     
     // Extract folderUrn and entityId from ACC URL if present
@@ -951,7 +953,7 @@ const Viewer = () => {
             <p className="text-sm text-muted-foreground">Loading projects...</p>
           ) : projects.length > 0 ? (
             projects.map((project) => {
-              const isTarget = project.id.replace('b.', '') === TARGET_PROJECT_ID;
+              const isTarget = project.id.replace('b.', '') === ALLOWED_PROJECT_ID;
               return (
                 <div
                   key={project.id}

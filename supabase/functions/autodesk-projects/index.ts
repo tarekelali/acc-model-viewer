@@ -5,6 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// SECURITY: Whitelist of allowed project IDs
+const ALLOWED_PROJECT_ID = 'd27a6383-5881-4756-9cff-3deccd318427';
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -38,7 +41,18 @@ serve(async (req) => {
     const projectsData = await projectsResponse.json();
     console.log('Projects response:', projectsData);
 
-    return new Response(JSON.stringify(projectsData), {
+    // SECURITY: Filter to only return the whitelisted project
+    const filteredProjects = (projectsData.data || []).filter((project: any) => {
+      const projectId = project.id.replace('b.', '');
+      return projectId === ALLOWED_PROJECT_ID;
+    });
+
+    console.log(`Filtered from ${projectsData.data?.length || 0} to ${filteredProjects.length} projects (whitelist: ${ALLOWED_PROJECT_ID})`);
+
+    return new Response(JSON.stringify({ 
+      data: filteredProjects,
+      links: projectsData.links 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

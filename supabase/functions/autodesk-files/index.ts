@@ -5,6 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// SECURITY: Whitelist of allowed project IDs
+const ALLOWED_PROJECT_ID = 'd27a6383-5881-4756-9cff-3deccd318427';
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -14,6 +17,19 @@ serve(async (req) => {
     const { token, projectId, folderUrn, entityId } = await req.json();
 
     console.log('Fetching files for project:', projectId, 'folderUrn:', folderUrn, 'entityId:', entityId);
+    
+    // SECURITY: Validate project ID against whitelist
+    const cleanProjectId = projectId.replace('b.', '');
+    if (cleanProjectId !== ALLOWED_PROJECT_ID) {
+      console.error(`Access denied: Project ${cleanProjectId} not in whitelist`);
+      return new Response(JSON.stringify({ 
+        error: 'Access denied: This project is not authorized',
+        allowed_project: ALLOWED_PROJECT_ID
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     // Ensure project ID has 'b.' prefix
     const formattedProjectId = projectId.startsWith('b.') ? projectId : `b.${projectId}`;
