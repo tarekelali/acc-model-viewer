@@ -88,21 +88,23 @@ serve(async (req) => {
     const urnParts = storageUrn.split('/');
     const bucketKey = urnParts[urnParts.length - 2];
     const objectKey = urnParts[urnParts.length - 1];
+    console.log('Parsed OSS location - Bucket:', bucketKey, 'Object:', objectKey);
 
-    // Step 3: Generate signed download URL (using user token)
-    console.log('Generating signed download URL...');
+    // Step 3: Generate signed download URL (using SSA token, not user token!)
+    console.log('Generating signed download URL with SSA token...');
     const downloadUrlResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${objectKey}/signeds3download`,
+      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${encodeURIComponent(objectKey)}/signeds3download`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${userToken}`,
+          'Authorization': `Bearer ${ssaToken}`,
         },
       }
     );
 
     if (!downloadUrlResponse.ok) {
       const error = await downloadUrlResponse.text();
+      console.error('Failed to generate download URL. Bucket:', bucketKey, 'Object:', objectKey, 'Error:', error);
       throw new Error(`Failed to generate download URL: ${error}`);
     }
 
@@ -152,6 +154,7 @@ serve(async (req) => {
 
     if (!newStorageResponse.ok) {
       const error = await newStorageResponse.text();
+      console.error('Failed to create storage:', error);
       throw new Error(`Failed to create storage: ${error}`);
     }
 
@@ -163,6 +166,7 @@ serve(async (req) => {
     const newUrnParts = newStorageUrn.split('/');
     const newBucketKey = newUrnParts[newUrnParts.length - 2];
     const newObjectKey = newUrnParts[newUrnParts.length - 1];
+    console.log('New OSS location - Bucket:', newBucketKey, 'Object:', newObjectKey);
 
     // Step 6: Upload file to new OSS location using SSA token
     console.log('Uploading file to new storage...');
@@ -180,13 +184,14 @@ serve(async (req) => {
 
     if (!uploadResponse.ok) {
       const error = await uploadResponse.text();
+      console.error('Failed to upload file. Bucket:', newBucketKey, 'Object:', newObjectKey, 'Error:', error);
       throw new Error(`Failed to upload file: ${error}`);
     }
 
-    console.log('File uploaded successfully');
+    console.log('File uploaded successfully to new storage');
 
     // Step 7: Create new version in ACC
-    console.log('Creating new version in ACC...');
+    console.log('Creating new version in ACC with SSA token...');
     const newVersionResponse = await fetch(
       `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/versions`,
       {
@@ -227,17 +232,23 @@ serve(async (req) => {
 
     if (!newVersionResponse.ok) {
       const error = await newVersionResponse.text();
+      console.error('Failed to create version:', error);
       throw new Error(`Failed to create version: ${error}`);
     }
 
     const newVersionData = await newVersionResponse.json();
-    console.log('New version created:', newVersionData.data.id);
+    const newVersionUrn = newVersionData.data.id;
+    console.log('✅ New version created successfully:', newVersionUrn);
+    console.log('✅ SSA app now owns this version');
+    console.log('Storage details - Bucket:', newBucketKey, 'Object:', newObjectKey);
 
     return new Response(JSON.stringify({
       success: true,
       message: 'File re-uploaded successfully with SSA credentials',
-      newVersionUrn: newVersionData.data.id,
+      newVersionUrn,
       newStorageUrn,
+      newBucketKey,
+      newObjectKey,
       fileSize: fileBuffer.byteLength,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
