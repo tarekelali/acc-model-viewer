@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const clientId = "DfARgfaBERc4spAWY2UOoKBKLH475EKX372DBiy0r9tYTKeL";
+    const clientId = "UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY";
     const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
 
     // Get 2-legged token for viewer
