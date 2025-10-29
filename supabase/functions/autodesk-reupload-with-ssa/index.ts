@@ -51,37 +51,37 @@ serve(async (req) => {
     const formattedProjectId = projectId.startsWith('b.') ? projectId : `b.${projectId}`;
     
     // Get the latest version of the item
-    const versionsUrl = `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/items/${encodeURIComponent(itemUrn)}/versions`;
-    const versionsResponse = await fetch(versionsUrl, {
+    const itemUrl = `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/items/${encodeURIComponent(itemUrn)}`;
+    const itemResponse = await fetch(itemUrl, {
       headers: {
         'Authorization': `Bearer ${userToken}`,
       },
     });
 
-    if (!versionsResponse.ok) {
-      const error = await versionsResponse.text();
-      throw new Error(`Failed to get versions: ${error}`);
+    if (!itemResponse.ok) {
+      const error = await itemResponse.text();
+      throw new Error(`Failed to get item: ${error}`);
     }
 
-    const versionsData = await versionsResponse.json();
-    const latestVersion = versionsData.data[0];
-    console.log('Latest version:', latestVersion.id);
+    const itemData = await itemResponse.json();
+    const tipVersionId = itemData.data.relationships.tip.data.id;
+    console.log('Latest version:', tipVersionId);
 
-    // Get storage location
-    const storageUrl = `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/versions/${encodeURIComponent(latestVersion.id)}/relationships/storage`;
-    const storageResponse = await fetch(storageUrl, {
+    // Get version details (includes storage)
+    const versionUrl = `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/versions/${encodeURIComponent(tipVersionId)}`;
+    const versionResponse = await fetch(versionUrl, {
       headers: {
         'Authorization': `Bearer ${userToken}`,
       },
     });
 
-    if (!storageResponse.ok) {
-      const error = await storageResponse.text();
-      throw new Error(`Failed to get storage: ${error}`);
+    if (!versionResponse.ok) {
+      const error = await versionResponse.text();
+      throw new Error(`Failed to get version: ${error}`);
     }
 
-    const storageData = await storageResponse.json();
-    const storageUrn = storageData.data.id;
+    const versionData = await versionResponse.json();
+    const storageUrn = versionData.data.relationships.storage.data.id;
     console.log('Storage URN:', storageUrn);
 
     // Parse OSS bucket and object from storage URN
@@ -187,7 +187,7 @@ serve(async (req) => {
 
     // Step 7: Create new version in ACC
     console.log('Creating new version in ACC...');
-    const versionResponse = await fetch(
+    const newVersionResponse = await fetch(
       `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/versions`,
       {
         method: 'POST',
@@ -225,18 +225,18 @@ serve(async (req) => {
       }
     );
 
-    if (!versionResponse.ok) {
-      const error = await versionResponse.text();
+    if (!newVersionResponse.ok) {
+      const error = await newVersionResponse.text();
       throw new Error(`Failed to create version: ${error}`);
     }
 
-    const versionData = await versionResponse.json();
-    console.log('New version created:', versionData.data.id);
+    const newVersionData = await newVersionResponse.json();
+    console.log('New version created:', newVersionData.data.id);
 
     return new Response(JSON.stringify({
       success: true,
       message: 'File re-uploaded successfully with SSA credentials',
-      newVersionUrn: versionData.data.id,
+      newVersionUrn: newVersionData.data.id,
       newStorageUrn,
       fileSize: fileBuffer.byteLength,
     }), {
