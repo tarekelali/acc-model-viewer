@@ -17,9 +17,9 @@ serve(async (req) => {
 
     console.log('Re-uploading file with SSA credentials:', { projectId, folderUrn, fileName });
 
-    const ssaClientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
+    const ssaClientSecret = Deno.env.get('AUTODESK_SSA_CLIENT_SECRET');
     if (!ssaClientSecret) {
-      throw new Error('AUTODESK_CLIENT_SECRET not configured');
+      throw new Error('AUTODESK_SSA_CLIENT_SECRET not configured - please add the m&cp-configurator app client secret');
     }
 
     // Step 1: Get SSA 2-legged token with data:write and data:create scopes
