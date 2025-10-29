@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X } from "lucide-react";
+import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -67,6 +67,7 @@ const Viewer = () => {
   const [currentFolderUrn, setCurrentFolderUrn] = useState<string | null>(null);
   const [currentVersionUrn, setCurrentVersionUrn] = useState<string | null>(null);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [isReuploading, setIsReuploading] = useState(false);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -904,6 +905,41 @@ const Viewer = () => {
     toast("Changes cleared");
   };
 
+  const handleReuploadWithSSA = async () => {
+    setIsReuploading(true);
+    
+    try {
+      const token = await ensureValidToken();
+      
+      toast('Re-uploading file with SSA app...');
+      
+      const { data, error } = await supabase.functions.invoke('autodesk-reupload-with-ssa', {
+        body: {
+          userToken: token,
+          projectId: 'd27a6383-5881-4756-9cff-3deccd318427',
+          folderUrn: 'urn:adsk.wipprod:fs.folder:co.pTXcoJRjSkuopE4nj1Y-yA',
+          itemUrn: 'urn:adsk.wipprod:dm.lineage:GHgronViQjKVtKfVIp91Vg',
+          fileName: 'HFB 01_L01.rvt'
+        },
+      });
+
+      if (error) {
+        console.error('Re-upload error:', error);
+        toast.error(`Re-upload failed: ${error.message}`);
+        return;
+      }
+
+      console.log('Re-upload response:', data);
+      toast.success('File re-uploaded successfully! The SSA app now owns the file.');
+      
+    } catch (error) {
+      console.error('Re-upload error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to re-upload file');
+    } finally {
+      setIsReuploading(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
@@ -941,6 +977,35 @@ const Viewer = () => {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">Accepts project ID or full ACC URL</p>
+            </div>
+          )}
+
+          {/* Re-upload with SSA button */}
+          {accessToken && (
+            <div className="space-y-2 pb-4 border-b border-border">
+              <label className="text-sm font-medium text-foreground">SSA Re-upload</label>
+              <Button
+                onClick={handleReuploadWithSSA}
+                disabled={isReuploading}
+                size="sm"
+                variant="secondary"
+                className="w-full gap-2"
+              >
+                {isReuploading ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    Re-uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Re-upload HFB 01_L01.rvt
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Re-uploads the file using SSA app credentials for Design Automation
+              </p>
             </div>
           )}
           
