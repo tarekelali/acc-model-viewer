@@ -21,7 +21,7 @@ serve(async (req) => {
       );
     }
 
-    const clientId = "UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY";
+    const clientId = "DfARgfaBERc4spAWY2UOoKBKLH475EKX372DBiy0r9tYTKeL";
     const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
 
     if (!clientSecret) {

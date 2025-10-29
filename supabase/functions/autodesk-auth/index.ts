@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const clientId = "UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY";
+    const clientId = "DfARgfaBERc4spAWY2UOoKBKLH475EKX372DBiy0r9tYTKeL";
     const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
     const redirectUri = `${Deno.env.get('SUPABASE_URL')}/functions/v1/autodesk-auth`;
 
