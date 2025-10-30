@@ -197,13 +197,16 @@ serve(async (req) => {
       }
     );
 
+    console.log('🟣 NEW CODE - Step 6a HTTP status:', signedUploadRequest.status);
+    const responseText = await signedUploadRequest.text();
+    console.log('🟣 NEW CODE - Step 6a raw response:', responseText);
+
     if (!signedUploadRequest.ok) {
-      const error = await signedUploadRequest.text();
-      console.error('❌ NEW CODE - Failed to get signed upload URL:', error);
-      throw new Error(`Failed to get signed upload URL: ${error}`);
+      console.error('❌ NEW CODE - Failed to get signed upload URL. Status:', signedUploadRequest.status, 'Body:', responseText);
+      throw new Error(`Failed to get signed upload URL (${signedUploadRequest.status}): ${responseText}`);
     }
 
-    const signedUploadData = await signedUploadRequest.json();
+    const signedUploadData = JSON.parse(responseText);
     console.log('🟢 NEW CODE - Step 6a response (full JSON):', JSON.stringify(signedUploadData, null, 2));
     
     // For ACC buckets, response structure is { uploadKey: string, urls: string[] }
