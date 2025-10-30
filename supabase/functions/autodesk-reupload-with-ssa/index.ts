@@ -92,34 +92,27 @@ serve(async (req) => {
     const bucketKey = bucketPart.substring(bucketPart.lastIndexOf(':') + 1);
     console.log('Parsed OSS location - Bucket:', bucketKey, 'Object:', objectKey);
 
-    // Step 3: Generate signed download URL (using USER token - user owns this file!)
-    console.log('Generating signed download URL with USER token...');
-    const downloadUrlResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${encodeURIComponent(objectKey)}/signeds3download`,
+    // Step 3: Download file directly using OSS API (ACC files in wip.dm.prod)
+    console.log('Step 3: Downloading file from OSS with USER token...');
+    console.log('Bucket:', bucketKey, 'Object:', objectKey);
+    
+    const fileResponse = await fetch(
+      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${encodeURIComponent(objectKey)}`,
       {
-        method: 'POST',
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${userToken}`,
         },
       }
     );
 
-    if (!downloadUrlResponse.ok) {
-      const error = await downloadUrlResponse.text();
-      console.error('Failed to generate download URL. Bucket:', bucketKey, 'Object:', objectKey, 'Error:', error);
-      throw new Error(`Failed to generate download URL: ${error}`);
-    }
-
-    const downloadUrlData = await downloadUrlResponse.json();
-    const downloadUrl = downloadUrlData.url || downloadUrlData.signedUrl;
-    console.log('Download URL obtained');
-
-    // Step 4: Download the file content
-    console.log('Downloading file content...');
-    const fileResponse = await fetch(downloadUrl);
     if (!fileResponse.ok) {
-      throw new Error(`Failed to download file: ${fileResponse.statusText}`);
+      const error = await fileResponse.text();
+      console.error('Failed to download file. Bucket:', bucketKey, 'Object:', objectKey, 'Error:', error);
+      throw new Error(`Failed to download file: ${error}`);
     }
+
+    console.log('✅ Step 3: File download initiated');
 
     const fileBuffer = await fileResponse.arrayBuffer();
     console.log('File downloaded, size:', fileBuffer.byteLength, 'bytes');
