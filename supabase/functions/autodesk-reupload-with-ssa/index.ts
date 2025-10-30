@@ -172,27 +172,70 @@ serve(async (req) => {
     const newBucketKey = newBucketPart.substring(newBucketPart.lastIndexOf(':') + 1);
     console.log('New OSS location - Bucket:', newBucketKey, 'Object:', newObjectKey);
 
-    // Step 6: Upload file to new OSS location using SSA token
-    console.log('Uploading file to new storage...');
-    const uploadResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}`,
+    // Step 6: Upload file using 3-step signed S3 upload flow
+    // Step 6a: Request signed upload URL
+    console.log('Step 6a: Requesting signed upload URL...');
+    const signedUploadRequest = await fetch(
+      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
       {
-        method: 'PUT',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${ssaToken}`,
-          'Content-Type': 'application/octet-stream',
+          'Content-Type': 'application/json',
         },
-        body: fileBuffer,
       }
     );
 
-    if (!uploadResponse.ok) {
-      const error = await uploadResponse.text();
-      console.error('Failed to upload file. Bucket:', newBucketKey, 'Object:', newObjectKey, 'Error:', error);
-      throw new Error(`Failed to upload file: ${error}`);
+    if (!signedUploadRequest.ok) {
+      const error = await signedUploadRequest.text();
+      console.error('Failed to get signed upload URL:', error);
+      throw new Error(`Failed to get signed upload URL: ${error}`);
     }
 
-    console.log('File uploaded successfully to new storage');
+    const signedUploadData = await signedUploadRequest.json();
+    const { uploadUrl, uploadKey } = signedUploadData;
+    console.log('✅ Step 6a: Signed upload URL obtained');
+
+    // Step 6b: Upload file to S3
+    console.log('Step 6b: Uploading file to S3...');
+    const s3UploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      body: fileBuffer,
+    });
+
+    if (!s3UploadResponse.ok) {
+      const error = await s3UploadResponse.text();
+      console.error('Failed to upload to S3:', error);
+      throw new Error(`Failed to upload to S3: ${error}`);
+    }
+
+    console.log('✅ Step 6b: File uploaded to S3');
+
+    // Step 6c: Finalize upload
+    console.log('Step 6c: Finalizing upload with uploadKey...');
+    const finalizeResponse = await fetch(
+      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${ssaToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uploadKey }),
+      }
+    );
+
+    if (!finalizeResponse.ok) {
+      const error = await finalizeResponse.text();
+      console.error('Failed to finalize upload:', error);
+      throw new Error(`Failed to finalize upload: ${error}`);
+    }
+
+    console.log('✅ Step 6c: Upload finalized - SSA app now owns the file');
+    console.log('✅ File uploaded successfully to new storage');
 
     // Step 7: Create new version in ACC
     console.log('Creating new version in ACC with SSA token...');
