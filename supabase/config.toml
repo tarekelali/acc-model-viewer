@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.autodesk-reupload-ssa]
 verify_jwt = false
+
+[functions.reupload-file-ssa]
+verify_jwt = false
