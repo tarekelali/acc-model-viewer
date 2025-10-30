@@ -92,14 +92,14 @@ serve(async (req) => {
     const bucketKey = bucketPart.substring(bucketPart.lastIndexOf(':') + 1);
     console.log('Parsed OSS location - Bucket:', bucketKey, 'Object:', objectKey);
 
-    // Step 3: Generate signed download URL (using SSA token, not user token!)
-    console.log('Generating signed download URL with SSA token...');
+    // Step 3: Generate signed download URL (using USER token - user owns this file!)
+    console.log('Generating signed download URL with USER token...');
     const downloadUrlResponse = await fetch(
       `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${encodeURIComponent(objectKey)}/signeds3download`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${ssaToken}`,
+          'Authorization': `Bearer ${userToken}`,
         },
       }
     );
