@@ -85,9 +85,11 @@ serve(async (req) => {
     console.log('Storage URN:', storageUrn);
 
     // Parse OSS bucket and object from storage URN
-    const urnParts = storageUrn.split('/');
-    const bucketKey = urnParts[urnParts.length - 2];
-    const objectKey = urnParts[urnParts.length - 1];
+    // URN format: urn:adsk.objects:os.object:BUCKET_KEY/OBJECT_KEY
+    const lastSlashIndex = storageUrn.lastIndexOf('/');
+    const objectKey = storageUrn.substring(lastSlashIndex + 1);
+    const bucketPart = storageUrn.substring(0, lastSlashIndex);
+    const bucketKey = bucketPart.substring(bucketPart.lastIndexOf(':') + 1);
     console.log('Parsed OSS location - Bucket:', bucketKey, 'Object:', objectKey);
 
     // Step 3: Generate signed download URL (using SSA token, not user token!)
@@ -163,9 +165,11 @@ serve(async (req) => {
     console.log('New storage created:', newStorageUrn);
 
     // Parse new OSS location
-    const newUrnParts = newStorageUrn.split('/');
-    const newBucketKey = newUrnParts[newUrnParts.length - 2];
-    const newObjectKey = newUrnParts[newUrnParts.length - 1];
+    // URN format: urn:adsk.objects:os.object:BUCKET_KEY/OBJECT_KEY
+    const newLastSlashIndex = newStorageUrn.lastIndexOf('/');
+    const newObjectKey = newStorageUrn.substring(newLastSlashIndex + 1);
+    const newBucketPart = newStorageUrn.substring(0, newLastSlashIndex);
+    const newBucketKey = newBucketPart.substring(newBucketPart.lastIndexOf(':') + 1);
     console.log('New OSS location - Bucket:', newBucketKey, 'Object:', newObjectKey);
 
     // Step 6: Upload file to new OSS location using SSA token
