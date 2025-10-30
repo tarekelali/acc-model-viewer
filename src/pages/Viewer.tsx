@@ -913,7 +913,7 @@ const Viewer = () => {
       
       toast('Re-uploading file with SSA app...');
       
-      const { data, error } = await supabase.functions.invoke('autodesk-reupload-with-ssa', {
+      const { data, error } = await supabase.functions.invoke('autodesk-reupload-ssa', {
         body: {
           userToken: token,
           projectId: 'd27a6383-5881-4756-9cff-3deccd318427',
