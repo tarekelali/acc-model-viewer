@@ -199,8 +199,18 @@ serve(async (req) => {
     }
 
     const signedUploadData = await signedUploadRequest.json();
-    const { uploadUrl, uploadKey } = signedUploadData;
-    console.log('✅ Step 6a: Signed upload URL obtained');
+    console.log('Step 6a response:', JSON.stringify(signedUploadData, null, 2));
+    
+    // For ACC buckets, response structure is { uploadKey: string, urls: string[] }
+    const uploadKey = signedUploadData.uploadKey;
+    const uploadUrl = signedUploadData.urls?.[0];
+    
+    if (!uploadKey || !uploadUrl) {
+      console.error('Invalid response structure:', signedUploadData);
+      throw new Error(`Invalid signeds3upload response: missing uploadKey or urls[0]`);
+    }
+    
+    console.log('✅ Step 6a: Signed upload URL obtained, uploadKey:', uploadKey);
 
     // Step 6b: Upload file to S3
     console.log('Step 6b: Uploading file to S3...');
