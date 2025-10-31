@@ -70,8 +70,8 @@ serve(async (req) => {
     console.log('🎫 Access token (first 30 chars):', accessToken ? accessToken.substring(0, 30) : 'NONE');
     console.log('⏱️ Token expires in:', tokenData.expires_in, 'seconds');
 
-    // Call the GET /aps/admin/v1/service-accounts endpoint as documented
-    const serviceAccountsUrl = `https://developer.api.autodesk.com/aps/admin/v1/service-accounts`;
+    // Call the correct SSA endpoint: GET /ssa/v1/service-accounts
+    const serviceAccountsUrl = `https://developer.api.autodesk.com/ssa/v1/service-accounts`;
     console.log('📡 Calling GET:', serviceAccountsUrl);
     console.log('🔑 Authorization: Bearer', accessToken.substring(0, 20) + '...');
 
@@ -97,7 +97,7 @@ serve(async (req) => {
       console.error('❌ Status:', serviceAccountsResponse.status, serviceAccountsResponse.statusText);
       console.error('❌ Body:', responseText);
       
-      throw new Error(`GET /aps/admin/v1/service-accounts failed (${serviceAccountsResponse.status}): ${responseText}`);
+      throw new Error(`GET /ssa/v1/service-accounts failed (${serviceAccountsResponse.status}): ${responseText}`);
     }
 
     // Parse the successful response
