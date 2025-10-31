@@ -27,7 +27,7 @@ serve(async (req) => {
       throw new Error(`Missing Autodesk SSA credentials - clientId: ${!!SSA_CLIENT_ID}, secret: ${!!clientSecret}`);
     }
 
-    console.log('🔐 Getting 2-legged token...');
+    console.log('🔐 Getting 2-legged token with app:read scope...');
 
     const tokenResponse = await fetch(
       'https://developer.api.autodesk.com/authentication/v2/token',
@@ -40,7 +40,7 @@ serve(async (req) => {
           client_id: SSA_CLIENT_ID,
           client_secret: clientSecret,
           grant_type: 'client_credentials',
-          scope: 'data:read',
+          scope: 'app:read',
         }),
       }
     );
@@ -53,36 +53,35 @@ serve(async (req) => {
 
     const tokenData = await tokenResponse.json();
     const accessToken = tokenData.access_token;
-    console.log('✅ Token acquired');
+    console.log('✅ Token acquired with app:read scope');
 
-    // Call the service-users endpoint to get the SSA user email
-    const serviceUsersUrl = `https://developer.api.autodesk.com/aps/admin/v1/apps/${SSA_CLIENT_ID}/service-users`;
-    console.log('📡 Calling:', serviceUsersUrl);
+    // Call the service-accounts endpoint to get the SSA user email
+    const serviceAccountsUrl = `https://developer.api.autodesk.com/aps/admin/v1/service-accounts`;
+    console.log('📡 Calling:', serviceAccountsUrl);
 
-    const serviceUsersResponse = await fetch(serviceUsersUrl, {
-      method: 'POST',
+    const serviceAccountsResponse = await fetch(serviceAccountsUrl, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
       },
     });
 
-    if (!serviceUsersResponse.ok) {
-      const error = await serviceUsersResponse.text();
-      console.error('❌ Service users request failed:', error);
-      throw new Error(`Failed to fetch service users: ${serviceUsersResponse.status} ${error}`);
+    if (!serviceAccountsResponse.ok) {
+      const error = await serviceAccountsResponse.text();
+      console.error('❌ Service accounts request failed:', error);
+      throw new Error(`Failed to fetch service accounts: ${serviceAccountsResponse.status} ${error}`);
     }
 
-    const serviceUserData = await serviceUsersResponse.json();
-    console.log('✅ Service user response:', JSON.stringify(serviceUserData, null, 2));
+    const serviceAccountData = await serviceAccountsResponse.json();
+    console.log('✅ Service accounts response:', JSON.stringify(serviceAccountData, null, 2));
     
-    const email = serviceUserData.email;
-    console.log('📧 SSA user email:', email);
+    const email = serviceAccountData.email || serviceAccountData.data?.email || 'Email not found in response';
+    console.log('📧 SSA service account email:', email);
 
     return new Response(
       JSON.stringify({
         email: email,
-        fullResponse: serviceUserData
+        fullResponse: serviceAccountData
       }),
       { 
         status: 200, 
