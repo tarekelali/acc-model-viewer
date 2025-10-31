@@ -168,8 +168,11 @@ serve(async (req) => {
     }
 
     const newStorageData = await newStorageResponse.json();
+    console.log('📦 FULL STORAGE RESPONSE:', JSON.stringify(newStorageData, null, 2));
     const newStorageUrn = newStorageData.data.id;
+    const objectId = newStorageData.data?.relationships?.storage?.data?.id || newStorageUrn;
     console.log('New storage created:', newStorageUrn);
+    console.log('Object ID:', objectId);
 
     // Parse new OSS location
     // URN format: urn:adsk.objects:os.object:BUCKET_KEY/OBJECT_KEY
@@ -260,9 +263,13 @@ serve(async (req) => {
       }
     );
 
+    // Extract x-request-id header for support requests
+    const requestId = finalizeResponse.headers.get('x-request-id');
+    console.log('🆔 Step 6c x-request-id header:', requestId || 'NOT FOUND');
+
     if (!finalizeResponse.ok) {
       const error = await finalizeResponse.text();
-      console.error('Failed to finalize upload:', error);
+      console.error('Failed to finalize upload (x-request-id:', requestId, '):', error);
       throw new Error(`Failed to finalize upload: ${error}`);
     }
 
@@ -326,9 +333,11 @@ serve(async (req) => {
       message: 'File re-uploaded successfully with SSA credentials',
       newVersionUrn,
       newStorageUrn,
+      objectId,
       newBucketKey,
       newObjectKey,
       fileSize: fileBuffer.byteLength,
+      fullStorageResponse: newStorageData,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
