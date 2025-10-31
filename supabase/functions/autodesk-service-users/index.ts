@@ -14,16 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { accountId } = await req.json();
-
-    if (!accountId) {
-      return new Response(
-        JSON.stringify({ error: 'Account ID is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log('🔍 Fetching service users for account:', accountId);
+    console.log('🔍 Fetching SSA service user email...');
 
     // Get 2-legged OAuth token using SSA credentials
     const clientSecret = Deno.env.get('AUTODESK_SSA_CLIENT_SECRET');
@@ -49,7 +40,7 @@ serve(async (req) => {
           client_id: SSA_CLIENT_ID,
           client_secret: clientSecret,
           grant_type: 'client_credentials',
-          scope: 'account:read',
+          scope: 'data:read',
         }),
       }
     );
@@ -64,45 +55,34 @@ serve(async (req) => {
     const accessToken = tokenData.access_token;
     console.log('✅ Token acquired');
 
-    // Call the users endpoint (service users should be included here)
-    const usersUrl = `https://developer.api.autodesk.com/hq/v1/accounts/${accountId}/users`;
-    console.log('📡 Calling:', usersUrl);
+    // Call the service-users endpoint to get the SSA user email
+    const serviceUsersUrl = `https://developer.api.autodesk.com/aps/admin/v1/apps/${SSA_CLIENT_ID}/service-users`;
+    console.log('📡 Calling:', serviceUsersUrl);
 
-    const usersResponse = await fetch(usersUrl, {
-      method: 'GET',
+    const serviceUsersResponse = await fetch(serviceUsersUrl, {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
     });
 
-    if (!usersResponse.ok) {
-      const error = await usersResponse.text();
-      console.error('❌ Users request failed:', error);
-      throw new Error(`Failed to fetch users: ${usersResponse.status} ${error}`);
+    if (!serviceUsersResponse.ok) {
+      const error = await serviceUsersResponse.text();
+      console.error('❌ Service users request failed:', error);
+      throw new Error(`Failed to fetch service users: ${serviceUsersResponse.status} ${error}`);
     }
 
-    const usersData = await usersResponse.json();
-    console.log('✅ Users retrieved, total:', usersData.length || 0);
+    const serviceUserData = await serviceUsersResponse.json();
+    console.log('✅ Service user response:', JSON.stringify(serviceUserData, null, 2));
     
-    // Filter to find service users (those with email containing the client ID or app name)
-    const serviceUsers = usersData.filter((user: any) => 
-      user.email && (
-        user.email.includes('DfARgfaBERc4spAWY2UOoKBKLH475EKX372DBiy0r9tYTKeL') ||
-        user.email.toLowerCase().includes('m&cp-configurator') ||
-        user.email.toLowerCase().includes('service') ||
-        user.role === 'service_account'
-      )
-    );
-    
-    console.log('🔍 Found service users:', serviceUsers.length);
-    console.log('📧 Service user details:', JSON.stringify(serviceUsers, null, 2));
+    const email = serviceUserData.email;
+    console.log('📧 SSA user email:', email);
 
     return new Response(
       JSON.stringify({
-        totalUsers: usersData.length || 0,
-        serviceUsers: serviceUsers,
-        allUsers: usersData
+        email: email,
+        fullResponse: serviceUserData
       }),
       { 
         status: 200, 
