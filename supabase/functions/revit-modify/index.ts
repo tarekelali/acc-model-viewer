@@ -478,18 +478,19 @@ serve(async (req) => {
     
     console.log('[STEP 3] ACC Storage - Bucket:', accBucketKey, 'Object:', accObjectKey);
     
-    // Get signed download URL using user's token
+    // Get signed download URL using Data Management API (for ACC files)
     const cleanToken = effectiveToken.replace(/^Bearer\s+/i, '');
     let accSignedUrlResponse;
     try {
+      // Use OSS object details endpoint with 'with' parameter to get signed URL
       const encodedObjectKey = encodeURIComponent(accObjectKey);
+      console.log(`[STEP 3] Requesting signed URL from: https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${encodedObjectKey}/details`);
       accSignedUrlResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${encodedObjectKey}/signeds3download`,
+        `https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${encodedObjectKey}/details?with=signedUrl`,
         { 
-          method: 'POST',
+          method: 'GET',
           headers: { 
             'Authorization': `Bearer ${cleanToken}`,
-            'Content-Type': 'application/json'
           }
         }
       );
@@ -510,7 +511,7 @@ serve(async (req) => {
         'Failed to get ACC signed download URL',
         'ACC Signed URL',
         accSignedUrlResponse.status,
-        { response: errorText }
+        { response: errorText, bucket: accBucketKey, object: accObjectKey }
       );
     }
 
