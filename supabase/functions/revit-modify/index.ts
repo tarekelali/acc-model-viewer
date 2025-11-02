@@ -202,7 +202,7 @@ serve(async (req) => {
       );
     }
 
-    const { token, projectId, itemId, folderUrn, transforms } = requestBody;
+    const { token, projectId, itemId, folderUrn, transforms, ossBucket, ossObject } = requestBody;
     
     // Use token from body, or fallback to headers
     const effectiveToken = token || customAuthHeader || authHeader?.replace('Bearer ', '');
@@ -216,6 +216,9 @@ serve(async (req) => {
       hasTransforms: !!transforms,
       transformsType: typeof transforms,
       transformsKeys: transforms ? Object.keys(transforms) : [],
+      hasOssCoordinates: !!(ossBucket && ossObject),
+      ossBucket: ossBucket || 'NOT PROVIDED',
+      ossObject: ossObject || 'NOT PROVIDED',
       allFieldNames: Object.keys(requestBody)
     });
     
@@ -285,6 +288,21 @@ serve(async (req) => {
     }
 
     const transformKeys = Object.keys(transforms);
+    
+    // Validate OSS coordinates are provided (required to avoid memory limits)
+    if (!ossBucket || !ossObject) {
+      return createErrorResponse(
+        ErrorType.VALIDATION_ERROR,
+        'Missing OSS coordinates (ossBucket and ossObject). Please use the "SSA Re-upload" button first to upload the file to an OSS bucket. This avoids memory limits when processing large files.',
+        'Input Validation',
+        400,
+        { 
+          hint: 'Click the "SSA Re-upload" button in the UI before saving transformations',
+          requiredFields: ['ossBucket', 'ossObject'],
+          received: { ossBucket: ossBucket || 'MISSING', ossObject: ossObject || 'MISSING' }
+        }
+      );
+    }
     if (transformKeys.length === 0) {
       return createErrorResponse(
         ErrorType.VALIDATION_ERROR,
@@ -422,74 +440,20 @@ serve(async (req) => {
     const tipVersionId = itemData.data.relationships.tip.data.id;
     console.log('[STEP 1] ✓ Item fetched, tip version:', tipVersionId);
 
-    // ========== STEP 2: GET VERSION STORAGE ==========
-    console.log('[STEP 2] Fetching version storage details...');
+    // ========== STEP 2: GET SIGNED DOWNLOAD URL FROM OSS (using provided coordinates) ==========
+    console.log('[STEP 2] Using provided OSS coordinates from SSA re-upload');
+    console.log('[STEP 2] OSS Bucket:', ossBucket, 'Object:', ossObject);
     
-    let versionResponse;
+    // Get signed S3 download URL using OSS API
+    console.log(`[STEP 2] Requesting signed download URL from OSS...`);
+    let ossSignedUrlResponse;
     try {
-      versionResponse = await fetch(
-        `https://developer.api.autodesk.com/data/v1/projects/b.${projectId}/versions/${encodeURIComponent(tipVersionId)}`,
-        { headers: { 'Authorization': `Bearer ${effectiveToken}` } }
-      );
-    } catch (e) {
-      return createErrorResponse(
-        ErrorType.API_ERROR,
-        'Network error while fetching version details',
-        'Fetch Version',
-        500,
-        { error: e instanceof Error ? e.message : String(e) }
-      );
-    }
-
-    if (!versionResponse.ok) {
-      const errorText = await versionResponse.text();
-      return createErrorResponse(
-        ErrorType.API_ERROR,
-        'Failed to fetch version from ACC',
-        'Fetch Version',
-        versionResponse.status,
-        { response: errorText }
-      );
-    }
-
-    const versionData = await versionResponse.json();
-    
-    if (!versionData?.data?.relationships?.storage?.data?.id) {
-      return createErrorResponse(
-        ErrorType.API_ERROR,
-        'Invalid version data - missing storage ID',
-        'Fetch Version',
-        500,
-        { versionData }
-      );
-    }
-
-    const storageId = versionData.data.relationships.storage.data.id;
-    console.log('[STEP 2] ✓ Storage ID:', storageId);
-
-    // ========== STEP 3: GET SIGNED DOWNLOAD URL FROM ACC ==========
-    console.log('[STEP 3] Getting signed download URL from ACC (no download to memory)...');
-    
-    // Parse storage URN to get bucket and object key
-    const storageIdParts = storageId.split(':');
-    const bucketAndObject = storageIdParts[storageIdParts.length - 1];
-    const [accBucketKey, ...objectKeyParts] = bucketAndObject.split('/');
-    const accObjectKey = objectKeyParts.join('/');
-    
-    console.log('[STEP 3] ACC Storage - Bucket:', accBucketKey, 'Object:', accObjectKey);
-    
-    // Get signed S3 download URL using OSS API with user's token
-    const cleanToken = effectiveToken.replace(/^Bearer\s+/i, '');
-    let accSignedUrlResponse;
-    try {
-      // Use OSS signeds3download endpoint to get a pre-signed S3 URL
-      console.log(`[STEP 3] Requesting signed S3 URL from: https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${accObjectKey}/signeds3download`);
-      accSignedUrlResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${accObjectKey}/signeds3download`,
+      ossSignedUrlResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucket}/objects/${ossObject}/signeds3download`,
         { 
           method: 'POST',
           headers: { 
-            'Authorization': `Bearer ${cleanToken}`,
+            'Authorization': `Bearer ${twoLeggedToken}`,
             'Content-Type': 'application/json'
           }
         }
@@ -497,39 +461,38 @@ serve(async (req) => {
     } catch (e) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Network error getting ACC signed download URL',
-        'ACC Signed URL',
+        'Network error getting OSS signed download URL',
+        'OSS Signed URL',
         500,
         { error: e instanceof Error ? e.message : String(e) }
       );
     }
 
-    if (!accSignedUrlResponse.ok) {
-      const errorText = await accSignedUrlResponse.text();
+    if (!ossSignedUrlResponse.ok) {
+      const errorText = await ossSignedUrlResponse.text();
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Failed to get ACC signed S3 download URL',
-        'ACC Signed URL',
-        accSignedUrlResponse.status,
-        { response: errorText, bucket: accBucketKey, object: accObjectKey }
+        'Failed to get OSS signed download URL',
+        'OSS Signed URL',
+        ossSignedUrlResponse.status,
+        { response: errorText, bucket: ossBucket, object: ossObject }
       );
     }
 
-    const accSignedData = await accSignedUrlResponse.json();
-    console.log('[STEP 3] Signed URL response keys:', Object.keys(accSignedData));
-    const downloadUrl = accSignedData.url;
+    const ossSignedData = await ossSignedUrlResponse.json();
+    const downloadUrl = ossSignedData.url;
 
     if (!downloadUrl) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'No signed URL in ACC response',
-        'ACC Signed URL',
+        'No signed URL in OSS response',
+        'OSS Signed URL',
         500,
-        { accSignedData }
+        { ossSignedData }
       );
     }
 
-    console.log('[STEP 3] ✓ ACC signed download URL obtained (will be used directly by Design Automation)');
+    console.log('[STEP 2] ✓ OSS signed download URL obtained (will be passed directly to Design Automation)');
 
     // ========== STEP 3.5: CREATE TEMP BUCKET FOR OUTPUT ==========
     console.log('[STEP 3.5] Creating temporary bucket for output file...');

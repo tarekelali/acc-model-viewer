@@ -68,6 +68,7 @@ const Viewer = () => {
   const [currentVersionUrn, setCurrentVersionUrn] = useState<string | null>(null);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [isReuploading, setIsReuploading] = useState(false);
+  const [ossCoordinates, setOssCoordinates] = useState<{ bucket: string; object: string } | null>(null);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -817,13 +818,21 @@ const Viewer = () => {
         };
       });
 
-      // Prepare request payload with Autodesk token
+      // Check if SSA re-upload has been done
+      if (!ossCoordinates) {
+        toast.error('Please click "SSA Re-upload" button first to upload the file to OSS storage. This is required to avoid memory limits.');
+        return;
+      }
+
+      // Prepare request payload with Autodesk token and OSS coordinates
       const requestPayload = {
         token: accessToken, // Autodesk access token for ACC API calls
         itemId: currentItemId,
         projectId: currentProjectId,
         folderUrn: currentFolderUrn,
-        transforms: transformsObject
+        transforms: transformsObject,
+        ossBucket: ossCoordinates.bucket,  // From SSA re-upload
+        ossObject: ossCoordinates.object    // From SSA re-upload
       };
 
       // Log the full request payload for debugging
@@ -833,6 +842,9 @@ const Viewer = () => {
         projectId: requestPayload.projectId,
         folderUrn: requestPayload.folderUrn,
         transformCount: Object.keys(transformsObject).length,
+        hasOssCoordinates: !!(requestPayload.ossBucket && requestPayload.ossObject),
+        ossBucket: requestPayload.ossBucket,
+        ossObject: requestPayload.ossObject,
         transforms: transformsObject
       }, null, 2));
 
@@ -930,7 +942,17 @@ const Viewer = () => {
       }
 
       console.log('Re-upload response:', data);
-      toast.success('File re-uploaded successfully! The SSA app now owns the file.');
+      
+      // Store OSS coordinates for later use in revit-modify
+      if (data.newBucketKey && data.newObjectKey) {
+        setOssCoordinates({
+          bucket: data.newBucketKey,
+          object: data.newObjectKey
+        });
+        toast.success(`File re-uploaded successfully! OSS coordinates stored. You can now save transformations.`);
+      } else {
+        toast.success('File re-uploaded successfully! The SSA app now owns the file.');
+      }
       
     } catch (error) {
       console.error('Re-upload error:', error);
@@ -984,6 +1006,11 @@ const Viewer = () => {
           {accessToken && (
             <div className="space-y-2 pb-4 border-b border-border">
               <label className="text-sm font-medium text-foreground">SSA Re-upload</label>
+              {ossCoordinates && (
+                <div className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950 p-2 rounded">
+                  ✓ File uploaded to OSS storage
+                </div>
+              )}
               <Button
                 onClick={handleReuploadWithSSA}
                 disabled={isReuploading}
@@ -999,12 +1026,15 @@ const Viewer = () => {
                 ) : (
                   <>
                     <Upload className="h-4 w-4" />
-                    Re-upload HFB 01_L01.rvt
+                    {ossCoordinates ? 'Re-upload Again' : 'Re-upload to OSS'}
                   </>
                 )}
               </Button>
               <p className="text-xs text-muted-foreground">
-                Re-uploads the file using SSA app credentials for Design Automation
+                {ossCoordinates 
+                  ? 'File ready for transformations. Re-upload if needed.'
+                  : 'Required before saving transformations to avoid memory limits.'
+                }
               </p>
             </div>
           )}
