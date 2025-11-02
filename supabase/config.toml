@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.autodesk-service-users]
 verify_jwt = false
+
+[functions.ssa-get-email]
+verify_jwt = false
