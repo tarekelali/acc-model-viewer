@@ -142,15 +142,17 @@ serve(async (req) => {
     const fileBuffer = await fileResponse.arrayBuffer();
     console.log('File downloaded, size:', fileBuffer.byteLength, 'bytes');
 
-    // Step 5: Create/ensure regular OSS bucket exists (not ACC managed)
-    console.log('Step 5: Ensuring regular OSS bucket exists...');
-    const ossBucketKey = 'revit-transform-input';
+    // Step 5: Upload to regular OSS bucket (no bucket creation needed)
+    console.log('Step 5: Uploading file to regular OSS bucket...');
+    
+    // Use transient bucket that gets auto-created (no special permissions needed)
+    const ossBucketKey = `revit_temp_${Date.now()}`;
     const ossObjectKey = `${crypto.randomUUID()}.rvt`;
     
     console.log('Target OSS Bucket:', ossBucketKey);
     console.log('Target OSS Object:', ossObjectKey);
     
-    // Try to create bucket (will fail if exists, which is fine)
+    // Create transient bucket (auto-expires after 24 hours)
     const createBucketResponse = await fetch(
       'https://developer.api.autodesk.com/oss/v2/buckets',
       {
@@ -161,53 +163,88 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           bucketKey: ossBucketKey,
-          policyKey: 'persistent', // Keep files for 30 days
+          policyKey: 'transient', // Auto-expires, no special permissions needed
         }),
       }
     );
     
-    if (createBucketResponse.ok) {
-      console.log('✅ Created new OSS bucket:', ossBucketKey);
-    } else {
+    if (!createBucketResponse.ok) {
       const error = await createBucketResponse.text();
-      // 409 Conflict means bucket already exists, which is fine
-      if (createBucketResponse.status === 409) {
-        console.log('✅ OSS bucket already exists:', ossBucketKey);
-      } else {
-        console.warn('Warning creating bucket (continuing anyway):', error);
-      }
+      console.error('Failed to create bucket:', error);
+      throw new Error(`Failed to create bucket: ${error}`);
     }
     
-    // Step 6: Upload file to regular OSS bucket using resumable upload
-    console.log('Step 6: Uploading file to regular OSS bucket...');
+    console.log('✅ Created transient OSS bucket:', ossBucketKey);
     
-    // Calculate file size in bytes
-    const fileSizeBytes = fileBuffer.byteLength;
-    console.log('File size:', fileSizeBytes, 'bytes');
+    // Step 6: Upload file using modern 3-step signed S3 upload
+    console.log('Step 6a: Requesting signed upload URL...');
     
-    // Use OSS resumable upload for reliability
-    const uploadResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucketKey}/objects/${ossObjectKey}/resumable`,
+    const signedUploadRequest = await fetch(
+      `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucketKey}/objects/${ossObjectKey}/signeds3upload?firstPart=1&parts=1`,
       {
-        method: 'PUT',
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${ssaToken}`,
-          'Content-Type': 'application/octet-stream',
-          'Content-Length': fileSizeBytes.toString(),
         },
-        body: fileBuffer,
       }
     );
     
-    if (!uploadResponse.ok) {
-      const error = await uploadResponse.text();
-      console.error('Failed to upload to OSS bucket:', error);
-      throw new Error(`Failed to upload to OSS bucket: ${error}`);
+    if (!signedUploadRequest.ok) {
+      const error = await signedUploadRequest.text();
+      console.error('Failed to get signed upload URL:', error);
+      throw new Error(`Failed to get signed upload URL: ${error}`);
     }
     
-    const uploadData = await uploadResponse.json();
+    const signedUploadData = await signedUploadRequest.json();
+    const uploadKey = signedUploadData.uploadKey;
+    const uploadUrl = signedUploadData.urls?.[0];
+    
+    if (!uploadKey || !uploadUrl) {
+      throw new Error('Invalid signeds3upload response: missing uploadKey or urls[0]');
+    }
+    
+    console.log('✅ Step 6a: Signed upload URL obtained');
+    
+    // Step 6b: Upload file to S3
+    console.log('Step 6b: Uploading file to S3...');
+    const s3UploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      body: fileBuffer,
+    });
+    
+    if (!s3UploadResponse.ok) {
+      const error = await s3UploadResponse.text();
+      console.error('Failed to upload to S3:', error);
+      throw new Error(`Failed to upload to S3: ${error}`);
+    }
+    
+    console.log('✅ Step 6b: File uploaded to S3');
+    
+    // Step 6c: Finalize upload
+    console.log('Step 6c: Finalizing upload...');
+    const finalizeResponse = await fetch(
+      `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucketKey}/objects/${ossObjectKey}/signeds3upload`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${ssaToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uploadKey }),
+      }
+    );
+    
+    if (!finalizeResponse.ok) {
+      const error = await finalizeResponse.text();
+      console.error('Failed to finalize upload:', error);
+      throw new Error(`Failed to finalize upload: ${error}`);
+    }
+    
+    console.log('✅ Step 6c: Upload finalized');
     console.log('✅ File uploaded to regular OSS bucket');
-    console.log('Upload response:', JSON.stringify(uploadData, null, 2));
     console.log('OSS Bucket:', ossBucketKey);
     console.log('OSS Object:', ossObjectKey);
 
@@ -215,7 +252,6 @@ serve(async (req) => {
       success: true,
       ossBucket: ossBucketKey,
       ossObject: ossObjectKey,
-      uploadDetails: uploadData,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
