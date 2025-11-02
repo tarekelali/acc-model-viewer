@@ -330,14 +330,25 @@ serve(async (req) => {
 
     console.log('[VALIDATED] All inputs valid, proceeding with workflow');
 
-    // ========== STEP 0: GET 2-LEGGED TOKEN ==========
+    // ========== STEP 0: GET 2-LEGGED TOKENS (Regular + SSA) ==========
     const clientId = 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
     const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
+    const ssaClientId = 'LJBS7Yz9IvYRZnfgN9iJL8LD1eUQKiUjFE41GRmD6YtW1gHX';
+    const ssaClientSecret = Deno.env.get('AUTODESK_SSA_CLIENT_SECRET');
     
     if (!clientSecret) {
       return createErrorResponse(
         ErrorType.AUTH_ERROR,
         'AUTODESK_CLIENT_SECRET not configured in environment',
+        'Environment Check',
+        500
+      );
+    }
+
+    if (!ssaClientSecret) {
+      return createErrorResponse(
+        ErrorType.AUTH_ERROR,
+        'AUTODESK_SSA_CLIENT_SECRET not configured in environment',
         'Environment Check',
         500
       );
@@ -395,6 +406,59 @@ serve(async (req) => {
 
     console.log('[STEP 0] ✓ 2-legged token acquired successfully');
 
+    // ========== STEP 0B: GET SSA TOKEN FOR OSS DOWNLOAD ==========
+    console.log('[STEP 0B] Getting SSA 2-legged token for OSS file download...');
+    
+    let ssaTokenResponse;
+    try {
+      ssaTokenResponse = await fetch('https://developer.api.autodesk.com/authentication/v2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: ssaClientId,
+          client_secret: ssaClientSecret,
+          scope: 'data:read data:write bucket:read',
+        }),
+      });
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.AUTH_ERROR,
+        'Network error while fetching SSA token',
+        'SSA Token Acquisition',
+        500,
+        { error: e instanceof Error ? e.message : String(e) }
+      );
+    }
+
+    if (!ssaTokenResponse.ok) {
+      const error = await ssaTokenResponse.text();
+      return createErrorResponse(
+        ErrorType.AUTH_ERROR,
+        'Failed to get SSA token from Autodesk',
+        'SSA Token Acquisition',
+        ssaTokenResponse.status,
+        { response: error }
+      );
+    }
+
+    const ssaTokenData = await ssaTokenResponse.json();
+    const ssaToken = ssaTokenData.access_token;
+    
+    if (!ssaToken) {
+      return createErrorResponse(
+        ErrorType.AUTH_ERROR,
+        'No access token in SSA authentication response',
+        'SSA Token Acquisition',
+        500,
+        { ssaTokenData }
+      );
+    }
+
+    console.log('[STEP 0B] ✓ SSA token acquired successfully');
+
     // ========== STEP 1: GET ITEM DETAILS ==========
     console.log('[STEP 1] Fetching item details from ACC...');
     
@@ -444,8 +508,8 @@ serve(async (req) => {
     console.log('[STEP 2] Using provided OSS coordinates from SSA re-upload');
     console.log('[STEP 2] OSS Bucket:', ossBucket, 'Object:', ossObject);
     
-    // Get signed S3 download URL using OSS API
-    console.log(`[STEP 2] Requesting signed download URL from OSS...`);
+    // Get signed S3 download URL using OSS API with SSA token
+    console.log(`[STEP 2] Requesting signed download URL from OSS using SSA token...`);
     let ossSignedUrlResponse;
     try {
       ossSignedUrlResponse = await fetch(
@@ -453,7 +517,7 @@ serve(async (req) => {
         { 
           method: 'POST',
           headers: { 
-            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Authorization': `Bearer ${ssaToken}`,
             'Content-Type': 'application/json'
           }
         }
