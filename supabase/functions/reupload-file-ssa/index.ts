@@ -268,14 +268,14 @@ serve(async (req) => {
     console.log('✅ Step 6c: Upload finalized - SSA app now owns the file');
     console.log('✅ File uploaded successfully to new storage');
 
-    // Step 7: Create new version in ACC
-    console.log('Creating new version in ACC with SSA token...');
+    // Step 7: Create new version in ACC using USER token (SSA not whitelisted for C4RModel)
+    console.log('Creating new version in ACC with USER token...');
     const newVersionResponse = await fetch(
       `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/versions`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${ssaToken}`,
+          'Authorization': `Bearer ${userToken}`,
           'Content-Type': 'application/vnd.api+json',
         },
         body: JSON.stringify({
