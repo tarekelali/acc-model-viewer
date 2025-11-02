@@ -63,6 +63,98 @@ function createErrorResponse(
   );
 }
 
+/**
+ * Downloads a file from ACC using the correct authentication approach
+ * @param userToken - User's access token (may include "Bearer " prefix)
+ * @param storageUrn - Storage URN from ACC (e.g., urn:adsk.objects:os.object:wip.dm.prod/uuid.rvt)
+ * @returns Promise<ArrayBuffer> - The downloaded file content
+ */
+async function downloadFileFromACC(userToken: string, storageUrn: string): Promise<ArrayBuffer> {
+  console.log('[DOWNLOAD] Starting ACC file download');
+  console.log('[DOWNLOAD] Storage URN:', storageUrn);
+  
+  // Step 1: Strip "Bearer " prefix if present to avoid duplication
+  const cleanToken = userToken.replace(/^Bearer\s+/i, '');
+  console.log('[DOWNLOAD] Token cleaned (first 20 chars):', cleanToken.substring(0, 20) + '...');
+  
+  // Step 2: Parse storage URN to extract bucket key and object key
+  // Format: urn:adsk.objects:os.object:wip.dm.prod/09a1c38e-d203-411a-b4f4-c3824260b1c5.rvt
+  console.log('[DOWNLOAD] Parsing storage URN...');
+  
+  const urnParts = storageUrn.split(':');
+  const bucketAndObject = urnParts[urnParts.length - 1]; // Get last part: "wip.dm.prod/uuid.rvt"
+  const [bucketKey, ...objectKeyParts] = bucketAndObject.split('/');
+  const objectKey = objectKeyParts.join('/'); // Rejoin in case object key has slashes
+  
+  console.log('[DOWNLOAD] Parsed - Bucket:', bucketKey, 'Object:', objectKey);
+  
+  // Step 3: Get signed download URL using OSS API with user's token
+  console.log('[DOWNLOAD] Requesting signed download URL...');
+  
+  const encodedObjectKey = encodeURIComponent(objectKey);
+  const signedUrlEndpoint = `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${encodedObjectKey}/signeds3download`;
+  
+  console.log('[DOWNLOAD] Signed URL endpoint:', signedUrlEndpoint);
+  console.log('[DOWNLOAD] Using USER token for signed URL request');
+  
+  let signedUrlResponse;
+  try {
+    signedUrlResponse = await fetch(signedUrlEndpoint, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${cleanToken}`, // Use user's token
+      }
+    });
+  } catch (e) {
+    console.error('[DOWNLOAD] Network error getting signed URL:', e);
+    throw new Error(`Network error while getting signed download URL: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  
+  if (!signedUrlResponse.ok) {
+    const errorText = await signedUrlResponse.text();
+    console.error('[DOWNLOAD] Failed to get signed URL. Status:', signedUrlResponse.status);
+    console.error('[DOWNLOAD] Error response:', errorText);
+    throw new Error(`Failed to get signed download URL (${signedUrlResponse.status}): ${errorText}`);
+  }
+  
+  const signedUrlData = await signedUrlResponse.json();
+  const downloadUrl = signedUrlData.url;
+  
+  if (!downloadUrl) {
+    console.error('[DOWNLOAD] No URL in response:', signedUrlData);
+    throw new Error('No download URL in signed URL response');
+  }
+  
+  console.log('[DOWNLOAD] ✓ Signed download URL obtained');
+  console.log('[DOWNLOAD] Signed URL (first 50 chars):', downloadUrl.substring(0, 50) + '...');
+  
+  // Step 4: Download the file using the signed URL (no auth header needed)
+  console.log('[DOWNLOAD] Downloading file content from signed URL...');
+  
+  let fileResponse;
+  try {
+    fileResponse = await fetch(downloadUrl, {
+      method: 'GET',
+      // No Authorization header needed for signed S3 URL
+    });
+  } catch (e) {
+    console.error('[DOWNLOAD] Network error downloading file:', e);
+    throw new Error(`Network error while downloading file: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  
+  if (!fileResponse.ok) {
+    const errorText = await fileResponse.text();
+    console.error('[DOWNLOAD] Failed to download file. Status:', fileResponse.status);
+    console.error('[DOWNLOAD] Error response:', errorText);
+    throw new Error(`Failed to download file from signed URL (${fileResponse.status}): ${errorText}`);
+  }
+  
+  const fileBuffer = await fileResponse.arrayBuffer();
+  console.log('[DOWNLOAD] ✓ File downloaded successfully. Size:', fileBuffer.byteLength, 'bytes');
+  
+  return fileBuffer;
+}
+
 serve(async (req) => {
   // 🔥🔥🔥 EDGE FUNCTION REACHED - UNCONDITIONAL LOGGING 🔥🔥🔥
   console.log('🔥🔥🔥 EDGE FUNCTION REACHED AT:', new Date().toISOString());
@@ -375,59 +467,246 @@ serve(async (req) => {
     const storageId = versionData.data.relationships.storage.data.id;
     console.log('[STEP 2] ✓ Storage ID:', storageId);
 
-    // ========== STEP 3: GET SIGNED DOWNLOAD URL ==========
-    console.log('[STEP 3] Parsing storage ID and getting signed download URL...');
+    // ========== STEP 3: DOWNLOAD FILE FROM ACC ==========
+    console.log('[STEP 3] Downloading file from ACC using user token...');
     
-    const storageIdParts = storageId.split(':');
-    const bucketAndObject = storageIdParts[storageIdParts.length - 1];
-    const [bucketKey, ...objectKeyParts] = bucketAndObject.split('/');
-    const objectKey = objectKeyParts.join('/');
-    
-    console.log('[STEP 3] Parsed storage - Bucket:', bucketKey, 'Object:', objectKey);
-    
-    let storageResponse;
+    let inputFileBuffer: ArrayBuffer;
     try {
-      // URL-encode the object key to handle special characters (e.g., .rvt extension)
-      const encodedObjectKey = encodeURIComponent(objectKey);
-      storageResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKey}/objects/${encodedObjectKey}/signeds3download`,
-        { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
+      inputFileBuffer = await downloadFileFromACC(effectiveToken, storageId);
+      console.log('[STEP 3] ✓ File downloaded from ACC successfully, size:', inputFileBuffer.byteLength, 'bytes');
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        `Failed to download file from ACC: ${e instanceof Error ? e.message : String(e)}`,
+        'Download from ACC',
+        500,
+        { error: e instanceof Error ? e.message : String(e), storageId }
+      );
+    }
+
+    // ========== STEP 3.5: UPLOAD INPUT FILE TO TEMP BUCKET ==========
+    console.log('[STEP 3.5] Creating temporary bucket for file processing...');
+    
+    const bucketKeyTemp = `revit_temp_${Date.now()}`;
+    console.log('[STEP 3.5] Bucket key:', bucketKeyTemp);
+    let createBucketResponse;
+    try {
+      createBucketResponse = await fetch(
+        'https://developer.api.autodesk.com/oss/v2/buckets',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            bucketKey: bucketKeyTemp,
+            policyKey: 'transient'
+          })
+        }
       );
     } catch (e) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Network error while getting signed download URL',
-        'Get Download URL',
+        'Network error while creating temp bucket',
+        'Create Temp Bucket',
         500,
         { error: e instanceof Error ? e.message : String(e) }
       );
     }
 
-    if (!storageResponse.ok) {
-      const errorText = await storageResponse.text();
+    // Bucket may already exist, which is fine (409 status)
+    if (!createBucketResponse.ok && createBucketResponse.status !== 409) {
+      const errorText = await createBucketResponse.text();
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Failed to get signed download URL',
-        'Get Download URL',
-        storageResponse.status,
+        'Failed to create temp bucket',
+        'Create Temp Bucket',
+        createBucketResponse.status,
         { response: errorText }
       );
     }
 
-    const downloadData = await storageResponse.json();
-    const downloadUrl = downloadData.url;
+    console.log('[STEP 3.5] ✓ Temp bucket ready');
+
+    // Upload input file to temp bucket
+    console.log('[STEP 3.5] Uploading input file to temp bucket...');
+    const inputFileKey = `input_${Date.now()}.rvt`;
     
-    if (!downloadUrl) {
+    // Get signed upload URL
+    let inputBatchUploadResponse;
+    try {
+      inputBatchUploadResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/batchsigneds3upload`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            requests: [{
+              objectKey: inputFileKey
+            }]
+          })
+        }
+      );
+    } catch (e) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'No download URL in response',
-        'Get Download URL',
+        'Network error while getting input file upload URL',
+        'Input File Upload URL',
         500,
-        { downloadData }
+        { error: e instanceof Error ? e.message : String(e) }
       );
     }
 
-    console.log('[STEP 3] ✓ Signed download URL obtained');
+    if (!inputBatchUploadResponse.ok) {
+      const errorData = await inputBatchUploadResponse.text();
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to get input file upload URL',
+        'Input File Upload URL',
+        inputBatchUploadResponse.status,
+        { errorData, bucketKey: bucketKeyTemp, inputFileKey }
+      );
+    }
+
+    const inputBatchData = await inputBatchUploadResponse.json();
+    const inputUploadInfo = inputBatchData.results?.[inputFileKey];
+    
+    if (!inputUploadInfo || !inputUploadInfo.urls || inputUploadInfo.urls.length === 0) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'No upload URLs in batch response for input file',
+        'Input File Upload URL',
+        500,
+        { inputBatchData }
+      );
+    }
+
+    // Upload to S3
+    const inputUploadUrl = inputUploadInfo.urls[0];
+    let inputS3UploadResponse;
+    try {
+      inputS3UploadResponse = await fetch(inputUploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/octet-stream'
+        },
+        body: inputFileBuffer
+      });
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Network error uploading input file to S3',
+        'Input File S3 Upload',
+        500,
+        { error: e instanceof Error ? e.message : String(e) }
+      );
+    }
+
+    if (!inputS3UploadResponse.ok) {
+      const errorText = await inputS3UploadResponse.text();
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to upload input file to S3',
+        'Input File S3 Upload',
+        inputS3UploadResponse.status,
+        { response: errorText }
+      );
+    }
+
+    // Complete upload
+    let inputCompleteResponse;
+    try {
+      inputCompleteResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/batchcompleteupload`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            requests: [{
+              objectKey: inputFileKey,
+              uploadKey: inputUploadInfo.uploadKey
+            }]
+          })
+        }
+      );
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Network error completing input file upload',
+        'Complete Input File Upload',
+        500,
+        { error: e instanceof Error ? e.message : String(e) }
+      );
+    }
+
+    if (!inputCompleteResponse.ok) {
+      const errorText = await inputCompleteResponse.text();
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to complete input file upload',
+        'Complete Input File Upload',
+        inputCompleteResponse.status,
+        { response: errorText }
+      );
+    }
+
+    console.log('[STEP 3.5] ✓ Input file uploaded to temp bucket');
+
+    // Get signed download URL for the uploaded file
+    let inputSignedResponse;
+    try {
+      inputSignedResponse = await fetch(
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${inputFileKey}/signeds3download`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    } catch (e) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Network error getting input file download URL',
+        'Input File Download URL',
+        500,
+        { error: e instanceof Error ? e.message : String(e) }
+      );
+    }
+
+    if (!inputSignedResponse.ok) {
+      const errorText = await inputSignedResponse.text();
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to get input file download URL',
+        'Input File Download URL',
+        inputSignedResponse.status,
+        { response: errorText }
+      );
+    }
+
+    const inputSignedData = await inputSignedResponse.json();
+    const downloadUrl = inputSignedData.signedUrl;
+
+    if (!downloadUrl) {
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'No download URL in input file response',
+        'Input File Download URL',
+        500,
+        { inputSignedData }
+      );
+    }
+
+    console.log('[STEP 3.5] ✓ Input file ready for Design Automation');
 
     // ========== STEP 4: VERIFY DESIGN AUTOMATION CONFIGURATION ==========
     console.log('[STEP 4] Verifying Design Automation configuration...');
@@ -478,42 +757,7 @@ serve(async (req) => {
 
     console.log('[STEP 4] ✓ Design Automation configuration verified');
 
-    // ========== STEP 5: CREATE OUTPUT BUCKET ==========
-    console.log('[STEP 5] Creating temporary bucket for output file...');
-    
-    const bucketKeyTemp = `revit_temp_${Date.now()}`;
-    console.log('[STEP 5] Bucket key:', bucketKeyTemp);
-    let createBucketResponse;
-    try {
-      createBucketResponse = await fetch(
-        'https://developer.api.autodesk.com/oss/v2/buckets',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${twoLeggedToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            bucketKey: bucketKeyTemp,
-            policyKey: 'transient'
-          })
-        }
-      );
-    } catch (e) {
-      return createErrorResponse(
-        ErrorType.API_ERROR,
-        'Network error while creating output bucket',
-        'Create Output Bucket',
-        500,
-        { error: e instanceof Error ? e.message : String(e) }
-      );
-    }
-
-    if (!createBucketResponse.ok && createBucketResponse.status !== 409) {
-      const errorText = await createBucketResponse.text();
-      console.warn('[STEP 5] Bucket creation warning (non-fatal):', errorText);
-    }
-
+    // ========== STEP 5: GET OUTPUT FILE SIGNED URL ==========
     console.log('[STEP 5] Getting signed URL for output file...');
     const outputObjectKey = 'output.rvt';
     const minutesExpiration = 30;
