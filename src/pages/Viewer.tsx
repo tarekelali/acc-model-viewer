@@ -41,7 +41,7 @@ const Viewer = () => {
   const ALLOWED_PROJECT_ID = "d27a6383-5881-4756-9cff-3deccd318427";
   
   // Hardcoded trial model URL
-  const TRIAL_MODEL_URL = "https://acc.autodesk.com/docs/files/projects/d27a6383-5881-4756-9cff-3deccd318427?folderUrn=urn%3Aadsk.wipprod%3Afs.folder%3Aco.pTXcoJRjSkuopE4nj1Y-yA&entityId=urn%3Aadsk.wipprod%3Adm.lineage%3AGHgronViQjKVtKfVIp91Vg&viewModel=detail&moduleId=folders&viewableGuid=f45222b7-9a71-d2d4-9674-a73d51f2c767";
+  const TRIAL_MODEL_URL = "https://acc.autodesk.com/docs/files/projects/d27a6383-5881-4756-9cff-3deccd318427?folderUrn=urn%3Aadsk.wipprod%3Afs.folder%3Aco.pTXcoJRjSkuopE4nj1Y-yA&entityId=urn%3Aadsk.wipprod%3Adm.lineage%3AzgRrW8akRpaXjYyDJoY-Zg&viewModel=detail&moduleId=folders&viewableGuid=b978b785-e198-7881-d90e-cf5603eb507f";
   
   const viewerRef = useRef<HTMLDivElement>(null);
   const transformExtensionRef = useRef<any>(null);
