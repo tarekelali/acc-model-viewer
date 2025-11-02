@@ -182,98 +182,29 @@ serve(async (req) => {
     const newBucketKey = newBucketPart.substring(newBucketPart.lastIndexOf(':') + 1);
     console.log('New OSS location - Bucket:', newBucketKey, 'Object:', newObjectKey);
 
-    // Step 6: Upload file using 3-step signed S3 upload flow
-    // Step 6a: Request signed upload URL
-    console.log('🔵 NEW CODE - Step 6a: Requesting signed upload URL...');
-    const signedUploadRequest = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${ssaToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          parts: 1  // Single part upload
-        }),
-      }
-    );
-
-    console.log('🟣 NEW CODE - Step 6a HTTP status:', signedUploadRequest.status);
-    const responseText = await signedUploadRequest.text();
-    console.log('🟣 NEW CODE - Step 6a raw response:', responseText);
-
-    if (!signedUploadRequest.ok) {
-      console.error('❌ NEW CODE - Failed to get signed upload URL. Status:', signedUploadRequest.status, 'Body:', responseText);
-      throw new Error(`Failed to get signed upload URL (${signedUploadRequest.status}): ${responseText}`);
-    }
-
-    const signedUploadData = JSON.parse(responseText);
-    console.log('🟢 NEW CODE - Step 6a response (full JSON):', JSON.stringify(signedUploadData, null, 2));
+    // Step 6: Upload file directly to ACC managed bucket (wip.dm.prod)
+    // ACC buckets support direct PUT with Bearer token - no signeds3upload needed
+    console.log('Step 6: Uploading file directly to ACC managed bucket...');
+    const uploadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}`;
+    console.log('Upload URL:', uploadUrl);
     
-    // For ACC buckets, response structure is { uploadKey: string, urls: string[] }
-    const uploadKey = signedUploadData.uploadKey;
-    const uploadUrl = signedUploadData.urls?.[0];
-    
-    console.log('🟡 NEW CODE - Parsed values:', {
-      uploadKey: uploadKey || 'MISSING',
-      uploadUrl: uploadUrl || 'MISSING',
-      hasUploadKey: !!uploadKey,
-      hasUploadUrl: !!uploadUrl,
-      responseKeys: Object.keys(signedUploadData)
-    });
-    
-    if (!uploadKey || !uploadUrl) {
-      console.error('❌ NEW CODE - Invalid response structure:', signedUploadData);
-      throw new Error(`Invalid signeds3upload response: missing uploadKey or urls[0]. Got keys: ${Object.keys(signedUploadData).join(', ')}`);
-    }
-    
-    console.log('✅ NEW CODE - Step 6a: Signed upload URL obtained, uploadKey:', uploadKey);
-
-    // Step 6b: Upload file to S3
-    console.log('Step 6b: Uploading file to S3...');
-    const s3UploadResponse = await fetch(uploadUrl, {
+    const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
+        'Authorization': `Bearer ${ssaToken}`,
         'Content-Type': 'application/octet-stream',
       },
       body: fileBuffer,
     });
 
-    if (!s3UploadResponse.ok) {
-      const error = await s3UploadResponse.text();
-      console.error('Failed to upload to S3:', error);
-      throw new Error(`Failed to upload to S3: ${error}`);
+    if (!uploadResponse.ok) {
+      const error = await uploadResponse.text();
+      console.error('Failed to upload file:', error);
+      throw new Error(`Failed to upload file: ${error}`);
     }
 
-    console.log('✅ Step 6b: File uploaded to S3');
-
-    // Step 6c: Finalize upload
-    console.log('Step 6c: Finalizing upload with uploadKey...');
-    const finalizeResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${ssaToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ uploadKey }),
-      }
-    );
-
-    // Extract x-request-id header for support requests
-    const requestId = finalizeResponse.headers.get('x-request-id');
-    console.log('🆔 Step 6c x-request-id header:', requestId || 'NOT FOUND');
-
-    if (!finalizeResponse.ok) {
-      const error = await finalizeResponse.text();
-      console.error('Failed to finalize upload (x-request-id:', requestId, '):', error);
-      throw new Error(`Failed to finalize upload: ${error}`);
-    }
-
-    console.log('✅ Step 6c: Upload finalized - SSA app now owns the file');
-    console.log('✅ File uploaded successfully to new storage');
+    console.log('✅ Step 6: File uploaded successfully to ACC managed bucket');
+    console.log('✅ SSA app now owns the file');
 
     // Step 7: Create new version in ACC
     console.log('Creating new version in ACC with SSA token...');
