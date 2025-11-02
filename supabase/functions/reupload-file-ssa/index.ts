@@ -194,8 +194,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          minutesExpiration: 30,
-          useCdn: false
+          parts: 1  // Single part upload
         }),
       }
     );
