@@ -266,76 +266,14 @@ serve(async (req) => {
     }
 
     console.log('✅ Step 6c: Upload finalized - SSA app now owns the file');
-    console.log('✅ File uploaded successfully to new storage');
-
-    // Step 7: Create new version in ACC using USER token (SSA not whitelisted for C4RModel)
-    console.log('Creating new version in ACC with USER token...');
-    const newVersionResponse = await fetch(
-      `https://developer.api.autodesk.com/data/v1/projects/${formattedProjectId}/versions`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Content-Type': 'application/vnd.api+json',
-        },
-        body: JSON.stringify({
-          jsonapi: { version: '1.0' },
-          data: {
-            type: 'versions',
-            attributes: {
-              name: fileName,
-              extension: {
-                type: 'versions:autodesk.bim360:C4RModel',
-                version: '1.0',
-                data: {
-                  mimeType: extensionData.mimeType || 'application/vnd.autodesk.r360',
-                  projectGuid: extensionData.projectGuid,
-                  modelGuid: extensionData.modelGuid,
-                  modelVersion: (extensionData.modelVersion || 0) + 1, // Increment version
-                },
-              },
-            },
-            relationships: {
-              item: {
-                data: {
-                  type: 'items',
-                  id: itemUrn,
-                },
-              },
-              storage: {
-                data: {
-                  type: 'objects',
-                  id: newStorageUrn,
-                },
-              },
-            },
-          },
-        }),
-      }
-    );
-
-    if (!newVersionResponse.ok) {
-      const error = await newVersionResponse.text();
-      console.error('Failed to create version:', error);
-      throw new Error(`Failed to create version: ${error}`);
-    }
-
-    const newVersionData = await newVersionResponse.json();
-    const newVersionUrn = newVersionData.data.id;
-    console.log('✅ New version created successfully:', newVersionUrn);
-    console.log('✅ SSA app now owns this version');
-    console.log('Storage details - Bucket:', newBucketKey, 'Object:', newObjectKey);
+    console.log('✅ File uploaded successfully to OSS storage');
+    console.log('OSS Bucket:', newBucketKey);
+    console.log('OSS Object:', newObjectKey);
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'File re-uploaded successfully with SSA credentials',
-      newVersionUrn,
-      newStorageUrn,
-      objectId,
-      newBucketKey,
-      newObjectKey,
-      fileSize: fileBuffer.byteLength,
-      fullStorageResponse: newStorageData,
+      ossBucket: newBucketKey,
+      ossObject: newObjectKey,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
