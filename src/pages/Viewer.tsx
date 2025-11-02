@@ -66,6 +66,7 @@ const Viewer = () => {
   const [currentItemId, setCurrentItemId] = useState<string | null>(null);
   const [currentFolderUrn, setCurrentFolderUrn] = useState<string | null>(null);
   const [currentVersionUrn, setCurrentVersionUrn] = useState<string | null>(null);
+  const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [isReuploading, setIsReuploading] = useState(false);
   const [ossCoordinates, setOssCoordinates] = useState<{ bucket: string; object: string } | null>(null);
@@ -316,7 +317,10 @@ const Viewer = () => {
       }
 
       console.log('Version URN:', tipVersionUrn);
+      setCurrentItemId(viewableItem.id);
       setCurrentVersionUrn(tipVersionUrn);
+      setCurrentFileName(viewableItem.attributes.displayName);
+      setOssCoordinates(null); // Reset OSS coordinates for new model
       
       // Base64 encode the version URN for the viewer
       // Convert to base64 using btoa (browser's built-in function)
@@ -921,17 +925,24 @@ const Viewer = () => {
     setIsReuploading(true);
     
     try {
+      // Validate that all required data is available
+      if (!currentProjectId || !currentFolderUrn || !currentItemId || !currentFileName) {
+        toast.error("Please load a model first before re-uploading");
+        setIsReuploading(false);
+        return;
+      }
+      
       const token = await ensureValidToken();
       
-      toast('Re-uploading file with SSA app...');
+      toast(`Re-uploading ${currentFileName} with SSA app...`);
       
       const { data, error } = await supabase.functions.invoke('reupload-file-ssa', {
         body: {
           userToken: token,
-          projectId: 'd27a6383-5881-4756-9cff-3deccd318427',
-          folderUrn: 'urn:adsk.wipprod:fs.folder:co.pTXcoJRjSkuopE4nj1Y-yA',
-          itemUrn: 'urn:adsk.wipprod:dm.lineage:GHgronViQjKVtKfVIp91Vg',
-          fileName: 'HFB 01_L01.rvt'
+          projectId: currentProjectId,
+          folderUrn: currentFolderUrn,
+          itemUrn: currentItemId,
+          fileName: currentFileName
         },
       });
 
