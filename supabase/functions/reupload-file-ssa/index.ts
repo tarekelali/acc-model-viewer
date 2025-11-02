@@ -280,7 +280,7 @@ serve(async (req) => {
             attributes: {
               name: fileName,
               extension: {
-                type: 'versions:autodesk.bim360:C4RModelVersion',
+                type: 'versions:autodesk.bim360:C4RModel',
                 version: '1.0',
               },
             },
