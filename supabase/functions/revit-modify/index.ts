@@ -478,19 +478,19 @@ serve(async (req) => {
     
     console.log('[STEP 3] ACC Storage - Bucket:', accBucketKey, 'Object:', accObjectKey);
     
-    // Get signed download URL using Data Management API (for ACC files)
+    // Get signed S3 download URL using OSS API with user's token
     const cleanToken = effectiveToken.replace(/^Bearer\s+/i, '');
     let accSignedUrlResponse;
     try {
-      // Use OSS object details endpoint with 'with' parameter to get signed URL
-      const encodedObjectKey = encodeURIComponent(accObjectKey);
-      console.log(`[STEP 3] Requesting signed URL from: https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${encodedObjectKey}/details`);
+      // Use OSS signeds3download endpoint to get a pre-signed S3 URL
+      console.log(`[STEP 3] Requesting signed S3 URL from: https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${accObjectKey}/signeds3download`);
       accSignedUrlResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${encodedObjectKey}/details?with=signedUrl`,
+        `https://developer.api.autodesk.com/oss/v2/buckets/${accBucketKey}/objects/${accObjectKey}/signeds3download`,
         { 
-          method: 'GET',
+          method: 'POST',
           headers: { 
             'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json'
           }
         }
       );
@@ -508,7 +508,7 @@ serve(async (req) => {
       const errorText = await accSignedUrlResponse.text();
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Failed to get ACC signed download URL',
+        'Failed to get ACC signed S3 download URL',
         'ACC Signed URL',
         accSignedUrlResponse.status,
         { response: errorText, bucket: accBucketKey, object: accObjectKey }
@@ -516,7 +516,8 @@ serve(async (req) => {
     }
 
     const accSignedData = await accSignedUrlResponse.json();
-    const downloadUrl = accSignedData.signedUrl;
+    console.log('[STEP 3] Signed URL response keys:', Object.keys(accSignedData));
+    const downloadUrl = accSignedData.url;
 
     if (!downloadUrl) {
       return createErrorResponse(
