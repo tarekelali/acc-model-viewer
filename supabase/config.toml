@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.ssa-get-email]
 verify_jwt = false
+
+[functions.ssa-create-account]
+verify_jwt = false
