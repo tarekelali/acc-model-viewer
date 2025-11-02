@@ -510,10 +510,15 @@ serve(async (req) => {
     
     // Get signed S3 download URL using OSS API with SSA token
     console.log(`[STEP 2] Requesting signed download URL from OSS using SSA token...`);
+    
+    // URL encode the object name to handle special characters like .rvt
+    const encodedOssObject = encodeURIComponent(ossObject);
+    console.log(`[STEP 2] Encoded object name: ${encodedOssObject}`);
+    
     let ossSignedUrlResponse;
     try {
       ossSignedUrlResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucket}/objects/${ossObject}/signeds3download`,
+        `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucket}/objects/${encodedOssObject}/signeds3download`,
         { 
           method: 'POST',
           headers: { 
