@@ -189,33 +189,29 @@ serve(async (req) => {
     console.log('New OSS location - Bucket:', newBucketKey, 'Object:', newObjectKey);
 
     // Step 6: Upload file using modern 3-step signed S3 upload process
-    // Step 6a: Request signed upload URL
-    console.log('Step 6a: Requesting signed upload URL...');
+    // Step 6a: Request signed upload URL using GET with query parameters
+    console.log('Step 6a: Requesting signed upload URL with GET method...');
     const signedUploadRequest = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
+      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload?firstPart=1&parts=1`,
       {
-        method: 'POST',
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${ssaToken}`,
-          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          minutesExpiration: 30,
-          useCdn: false
-        }),
       }
     );
 
     if (!signedUploadRequest.ok) {
       const error = await signedUploadRequest.text();
       console.error('Failed to get signed upload URL:', error);
+      console.error('Response status:', signedUploadRequest.status);
       throw new Error(`Failed to get signed upload URL: ${error}`);
     }
 
     const signedUploadData = await signedUploadRequest.json();
-    console.log('Step 6a response:', JSON.stringify(signedUploadData, null, 2));
+    console.log('Step 6a FULL RESPONSE:', JSON.stringify(signedUploadData, null, 2));
     
-    // For ACC buckets, response structure is { uploadKey: string, urls: string[] }
+    // Response structure: { uploadKey: string, urls: string[] }
     const uploadKey = signedUploadData.uploadKey;
     const uploadUrl = signedUploadData.urls?.[0];
     
