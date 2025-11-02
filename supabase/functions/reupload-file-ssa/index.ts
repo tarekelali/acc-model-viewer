@@ -89,6 +89,12 @@ serve(async (req) => {
     const storageUrn = versionData.data.relationships.storage.data.id;
     console.log('Storage URN:', storageUrn);
 
+    // Check file size - edge functions have ~500MB memory limit
+    const fileSize = versionData.data.attributes?.storageSize;
+    if (fileSize && fileSize > 100 * 1024 * 1024) { // 100MB limit
+      throw new Error(`File too large (${Math.round(fileSize / 1024 / 1024)}MB). Edge functions cannot handle files over 100MB. Please use smaller files or a different upload method.`);
+    }
+
     // Parse OSS bucket and object from storage URN
     // URN format: urn:adsk.objects:os.object:BUCKET_KEY/OBJECT_KEY
     const lastSlashIndex = storageUrn.lastIndexOf('/');

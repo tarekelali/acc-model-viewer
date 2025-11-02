@@ -937,7 +937,14 @@ const Viewer = () => {
 
       if (error) {
         console.error('Re-upload error:', error);
-        toast.error(`Re-upload failed: ${error.message}`);
+        const errorMessage = error.message || 'Unknown error';
+        const isFileTooLarge = errorMessage.includes('too large') || errorMessage.includes('100MB');
+        
+        toast.error(
+          isFileTooLarge 
+            ? 'File is too large (>100MB) for edge function processing. Please use smaller files or contact support for alternative methods.'
+            : `Re-upload failed: ${errorMessage}`
+        );
         return;
       }
 
