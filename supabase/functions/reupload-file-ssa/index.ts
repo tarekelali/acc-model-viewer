@@ -88,6 +88,11 @@ serve(async (req) => {
     const versionData = await versionResponse.json();
     const storageUrn = versionData.data.relationships.storage.data.id;
     console.log('Storage URN:', storageUrn);
+    
+    // Extract C4R extension data from original version (needed for creating new version)
+    const originalExtension = versionData.data.attributes?.extension;
+    const extensionData = originalExtension?.data || {};
+    console.log('Original extension data:', JSON.stringify(extensionData, null, 2));
 
     // Check file size - edge functions have ~500MB memory limit
     const fileSize = versionData.data.attributes?.storageSize;
@@ -282,6 +287,12 @@ serve(async (req) => {
               extension: {
                 type: 'versions:autodesk.bim360:C4RModel',
                 version: '1.0',
+                data: {
+                  mimeType: extensionData.mimeType || 'application/vnd.autodesk.r360',
+                  projectGuid: extensionData.projectGuid,
+                  modelGuid: extensionData.modelGuid,
+                  modelVersion: (extensionData.modelVersion || 0) + 1, // Increment version
+                },
               },
             },
             relationships: {
