@@ -962,10 +962,10 @@ const Viewer = () => {
       console.log('Re-upload response:', data);
       
       // Store OSS coordinates for later use in revit-modify
-      if (data.newBucketKey && data.newObjectKey) {
+      if (data.ossBucket && data.ossObject) {
         setOssCoordinates({
-          bucket: data.newBucketKey,
-          object: data.newObjectKey
+          bucket: data.ossBucket,
+          object: data.ossObject
         });
         toast.success(`File re-uploaded successfully! OSS coordinates stored. You can now save transformations.`);
       } else {
