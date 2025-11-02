@@ -64,8 +64,9 @@ Deno.serve(async (req) => {
     console.log('🔑 Authorization: Bearer', accessToken.substring(0, 20) + '...');
 
     const createAccountBody = {
+      name: 'servicemcpconfigurator',
       firstName: 'service',
-      lastName: 'mcp-configurator',
+      lastName: 'mcpconfigurator',
     };
 
     console.log('📝 Request body:', JSON.stringify(createAccountBody));
