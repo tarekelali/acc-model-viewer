@@ -333,7 +333,7 @@ serve(async (req) => {
     // ========== STEP 0: GET 2-LEGGED TOKENS (Regular + SSA) ==========
     const clientId = 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
     const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
-    const ssaClientId = 'LJBS7Yz9IvYRZnfgN9iJL8LD1eUQKiUjFE41GRmD6YtW1gHX';
+    const ssaClientId = 'DfARgfaBERc4spAWY2UOoKBKLH475EKX372DBiy0r9tYTKeL';
     const ssaClientSecret = Deno.env.get('AUTODESK_SSA_CLIENT_SECRET');
     
     if (!clientSecret) {
