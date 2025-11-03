@@ -1,11 +1,34 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+const REGULAR_CLIENT_ID = "UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY";
+const SSA_CLIENT_ID = "DfARgfaBERc4spAWY2UOoKBKLH475EKX372DBiy0r9tYTKeL";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const SSA_CLIENT_ID = "DfARgfaBERc4spAWY2UOoKBKLH475EKX372DBiy0r9tYTKeL";
+// Helper function to get regular app token (has bucket:create permissions)
+async function getRegularAppToken(clientSecret: string): Promise<string> {
+  const tokenResponse = await fetch('https://developer.api.autodesk.com/authentication/v2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: REGULAR_CLIENT_ID,
+      client_secret: clientSecret,
+      scope: 'bucket:create bucket:read data:read data:write',
+    }),
+  });
+  
+  if (!tokenResponse.ok) {
+    const error = await tokenResponse.text();
+    throw new Error(`Failed to get regular app token: ${error}`);
+  }
+  
+  const data = await tokenResponse.json();
+  return data.access_token;
+}
 
 // DISTINCTIVE STARTUP LOG TO CONFIRM NEW CODE IS RUNNING
 console.log('🚀 NEW REUPLOAD-FILE-SSA FUNCTION VERSION LOADED - TIMESTAMP:', new Date().toISOString());
@@ -142,39 +165,53 @@ serve(async (req) => {
     const fileBuffer = await fileResponse.arrayBuffer();
     console.log('File downloaded, size:', fileBuffer.byteLength, 'bytes');
 
-    // Step 5: Upload to regular OSS bucket (no bucket creation needed)
-    console.log('Step 5: Uploading file to regular OSS bucket...');
+    // Step 5: Upload to permanent OSS bucket
+    console.log('Step 5: Uploading file to permanent OSS bucket...');
     
-    // Use transient bucket that gets auto-created (no special permissions needed)
-    const ossBucketKey = `revit_temp_${Date.now()}`;
+    // Use permanent bucket name
+    const ossBucketKey = 'revit-transform-temp';
     const ossObjectKey = `${crypto.randomUUID()}.rvt`;
     
     console.log('Target OSS Bucket:', ossBucketKey);
     console.log('Target OSS Object:', ossObjectKey);
     
-    // Create transient bucket (auto-expires after 24 hours)
+    // Step 5.1: Ensure OSS bucket exists using REGULAR app token
+    // Get regular app client secret
+    const regularClientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
+    if (!regularClientSecret) {
+      throw new Error('AUTODESK_CLIENT_SECRET not configured');
+    }
+    
+    // Try to create bucket with regular app token (has bucket:create privilege)
+    const regularToken = await getRegularAppToken(regularClientSecret);
+    
     const createBucketResponse = await fetch(
       'https://developer.api.autodesk.com/oss/v2/buckets',
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${ssaToken}`,
+          'Authorization': `Bearer ${regularToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           bucketKey: ossBucketKey,
-          policyKey: 'transient', // Auto-expires, no special permissions needed
+          policyKey: 'persistent', // Permanent bucket
         }),
       }
     );
-    
-    if (!createBucketResponse.ok) {
+
+    // 409 conflict means bucket already exists - that's fine!
+    if (!createBucketResponse.ok && createBucketResponse.status !== 409) {
       const error = await createBucketResponse.text();
       console.error('Failed to create bucket:', error);
       throw new Error(`Failed to create bucket: ${error}`);
     }
-    
-    console.log('✅ Created transient OSS bucket:', ossBucketKey);
+
+    if (createBucketResponse.status === 409) {
+      console.log('✅ Bucket already exists, using existing:', ossBucketKey);
+    } else {
+      console.log('✅ Created new persistent OSS bucket:', ossBucketKey);
+    }
     
     // Step 6: Upload file using modern 3-step signed S3 upload
     console.log('Step 6a: Requesting signed upload URL...');
