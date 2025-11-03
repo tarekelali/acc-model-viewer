@@ -405,6 +405,7 @@ serve(async (req) => {
     }
 
     console.log('[STEP 0] ✓ 2-legged token acquired successfully');
+    console.log('[REVIT-MODIFY] ✅ Regular token:', twoLeggedToken.substring(0, 20) + '...');
 
     // ========== STEP 0B: GET SSA TOKEN FOR OSS DOWNLOAD ==========
     console.log('[STEP 0B] Getting SSA 2-legged token for OSS file download...');
@@ -458,6 +459,7 @@ serve(async (req) => {
     }
 
     console.log('[STEP 0B] ✓ SSA token acquired successfully');
+    console.log('[REVIT-MODIFY] ✅ SSA token:', ssaToken.substring(0, 20) + '...');
 
     // ========== STEP 1: GET ITEM DETAILS ==========
     console.log('[STEP 1] Fetching item details from ACC...');
@@ -505,54 +507,98 @@ serve(async (req) => {
     console.log('[STEP 1] ✓ Item fetched, tip version:', tipVersionId);
 
     // ========== STEP 2: GET SIGNED DOWNLOAD URL FROM OSS (using provided coordinates) ==========
-    console.log('[STEP 2] Using provided OSS coordinates from SSA re-upload');
-    console.log('[STEP 2] OSS Bucket:', ossBucket, 'Object:', ossObject);
+    console.log('[REVIT-MODIFY] Downloading file from OSS...');
+    console.log('[REVIT-MODIFY]   - Bucket: revit-transform-temp');
+    console.log('[REVIT-MODIFY]   - Object:', ossObject);
     
-    // Get signed S3 download URL using OSS API with REGULAR token (same token used to upload)
-    console.log(`[STEP 2] Requesting signed download URL from OSS using REGULAR app token...`);
+    // CRITICAL: Use Regular token for revit-transform-temp bucket
+    const tokenToUse = twoLeggedToken; // Force regular token for OSS bucket
+    console.log('[REVIT-MODIFY] ✅ Using REGULAR token for download');
+    console.log('[REVIT-MODIFY]   - Token preview:', tokenToUse.substring(0, 30) + '...');
     
     // URL encode the object name to handle special characters like .rvt
     const encodedOssObject = encodeURIComponent(ossObject);
-    console.log(`[STEP 2] Encoded object name: ${encodedOssObject}`);
-    
     const ossDownloadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucket}/objects/${encodedOssObject}/signeds3download`;
-    console.log(`[STEP 2] Full OSS API URL being called: ${ossDownloadUrl}`);
+    console.log('[REVIT-MODIFY] Full download URL:', ossDownloadUrl);
     
-    let ossSignedUrlResponse;
-    try {
-      ossSignedUrlResponse = await fetch(
-        ossDownloadUrl,
-        { 
-          method: 'POST',
-          headers: { 
-            'Authorization': `Bearer ${twoLeggedToken}`,
+    // Retry logic for eventual consistency
+    const maxRetries = 5;
+    const retryDelay = 3000; // 3 seconds
+    let ossSignedData = null;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`[REVIT-MODIFY] Download attempt ${attempt}/${maxRetries}...`);
+      
+      try {
+        const ossSignedUrlResponse = await fetch(ossDownloadUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${tokenToUse}`,
             'Content-Type': 'application/json'
           }
+        });
+
+        console.log(`[REVIT-MODIFY] Attempt ${attempt} response status:`, ossSignedUrlResponse.status);
+
+        if (ossSignedUrlResponse.ok) {
+          ossSignedData = await ossSignedUrlResponse.json();
+          console.log(`[REVIT-MODIFY] ✅ Success on attempt ${attempt}!`);
+          break;
         }
-      );
-    } catch (e) {
+
+        // If 404 and not last attempt, retry
+        if (ossSignedUrlResponse.status === 404 && attempt < maxRetries) {
+          const errorText = await ossSignedUrlResponse.text();
+          console.log(`[REVIT-MODIFY] ⏳ 404 on attempt ${attempt}, retrying in ${retryDelay}ms...`);
+          console.log(`[REVIT-MODIFY]    Error: ${errorText}`);
+          lastError = errorText;
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          continue;
+        }
+
+        // Non-404 error or last attempt
+        const errorText = await ossSignedUrlResponse.text();
+        console.error('[REVIT-MODIFY] ❌ Failed to get signed download URL');
+        console.error('[REVIT-MODIFY]   - Status:', ossSignedUrlResponse.status);
+        console.error('[REVIT-MODIFY]   - Error:', errorText);
+        console.error('[REVIT-MODIFY]   - Token used: REGULAR');
+        
+        return createErrorResponse(
+          ErrorType.API_ERROR,
+          'Failed to get OSS signed download URL',
+          'OSS Signed URL',
+          ossSignedUrlResponse.status,
+          { response: errorText, bucket: ossBucket, object: ossObject, url: ossDownloadUrl, attempt }
+        );
+
+      } catch (error) {
+        if (attempt === maxRetries) {
+          console.error('[REVIT-MODIFY] ❌ All retry attempts failed');
+          return createErrorResponse(
+            ErrorType.API_ERROR,
+            `Failed after ${maxRetries} attempts. Last error: ${error instanceof Error ? error.message : String(error)}`,
+            'OSS Signed URL',
+            500,
+            { error: error instanceof Error ? error.message : String(error), url: ossDownloadUrl }
+          );
+        }
+        console.log(`[REVIT-MODIFY] ⚠️ Error on attempt ${attempt}:`, error instanceof Error ? error.message : String(error));
+        lastError = error instanceof Error ? error.message : String(error);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+
+    if (!ossSignedData) {
       return createErrorResponse(
         ErrorType.API_ERROR,
-        'Network error getting OSS signed download URL',
+        `Failed after ${maxRetries} attempts. Last error: ${lastError}`,
         'OSS Signed URL',
         500,
-        { error: e instanceof Error ? e.message : String(e), url: ossDownloadUrl }
+        { lastError, url: ossDownloadUrl }
       );
     }
 
-    if (!ossSignedUrlResponse.ok) {
-      const errorText = await ossSignedUrlResponse.text();
-      return createErrorResponse(
-        ErrorType.API_ERROR,
-        'Failed to get OSS signed download URL',
-        'OSS Signed URL',
-        ossSignedUrlResponse.status,
-        { response: errorText, bucket: ossBucket, object: ossObject, url: ossDownloadUrl }
-      );
-    }
-
-
-    const ossSignedData = await ossSignedUrlResponse.json();
     const downloadUrl = ossSignedData.url;
 
     if (!downloadUrl) {
@@ -565,7 +611,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('[STEP 2] ✓ OSS signed download URL obtained (will be passed directly to Design Automation)');
+    console.log('[REVIT-MODIFY] ✅ Got signed download URL, downloading file...');
 
     // ========== STEP 3.5: CREATE TEMP BUCKET FOR OUTPUT ==========
     console.log('[STEP 3.5] Creating temporary bucket for output file...');

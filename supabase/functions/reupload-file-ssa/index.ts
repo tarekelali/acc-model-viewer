@@ -51,9 +51,9 @@ serve(async (req) => {
       throw new Error('AUTODESK_CLIENT_SECRET not configured');
     }
     
-    console.log('Getting regular app token...');
+    console.log('[REUPLOAD] Step 1: Getting regular app token...');
     const regularToken = await getRegularAppToken(regularClientSecret);
-    console.log('Regular app token obtained successfully');
+    console.log('[REUPLOAD] ✅ Got regular app token:', regularToken.substring(0, 20) + '...');
 
     // Step 2: Download the existing file using user's token
     console.log('Getting storage location for existing file...');
@@ -144,20 +144,21 @@ serve(async (req) => {
     }
 
     const fileBuffer = await fileResponse.arrayBuffer();
-    console.log('File downloaded, size:', fileBuffer.byteLength, 'bytes');
+    console.log('[REUPLOAD] Step 3: Downloading from ACC...');
+    console.log('[REUPLOAD] ✅ Downloaded file:', fileBuffer.byteLength, 'bytes');
 
     // Step 5: Upload to permanent OSS bucket
-    console.log('Step 5: Uploading file to permanent OSS bucket...');
-    
     // Use permanent bucket name
     const ossBucketKey = 'revit-transform-temp';
     const ossObjectKey = `${crypto.randomUUID()}.rvt`;
     
-    console.log('Target OSS Bucket:', ossBucketKey);
-    console.log('Target OSS Object:', ossObjectKey);
+    console.log('[REUPLOAD] Step 4: Uploading to OSS bucket...');
+    console.log('[REUPLOAD]   - Bucket:', ossBucketKey);
+    console.log('[REUPLOAD]   - Object:', ossObjectKey);
+    console.log('[REUPLOAD]   - Size:', fileBuffer.byteLength, 'bytes');
     
     // Step 5.1: Ensure OSS bucket exists using regular app token
-    console.log('Creating/checking bucket with regular app token...');
+    console.log('[REUPLOAD] Step 2: Ensuring bucket exists...');
     
     const createBucketResponse = await fetch(
       'https://developer.api.autodesk.com/oss/v2/buckets',
@@ -177,18 +178,19 @@ serve(async (req) => {
     // 409 conflict means bucket already exists - that's fine!
     if (!createBucketResponse.ok && createBucketResponse.status !== 409) {
       const error = await createBucketResponse.text();
-      console.error('Failed to create bucket:', error);
+      console.error('[REUPLOAD] ❌ Failed to create bucket:', error);
       throw new Error(`Failed to create bucket: ${error}`);
     }
 
     if (createBucketResponse.status === 409) {
-      console.log('✅ Bucket already exists, using existing:', ossBucketKey);
+      console.log('[REUPLOAD] ✅ Bucket already exists, using existing:', ossBucketKey);
     } else {
-      console.log('✅ Created new persistent OSS bucket:', ossBucketKey);
+      console.log('[REUPLOAD] ✅ Created new persistent OSS bucket:', ossBucketKey);
     }
+    console.log('[REUPLOAD] ✅ Bucket ready');
     
     // Step 6: Upload file using modern 3-step signed S3 upload
-    console.log('Step 6a: Requesting signed upload URL...');
+    console.log('[REUPLOAD] Getting signed S3 upload URL...');
     
     const signedUploadRequest = await fetch(
       `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucketKey}/objects/${ossObjectKey}/signeds3upload?firstPart=1&parts=1`,
@@ -200,9 +202,11 @@ serve(async (req) => {
       }
     );
     
+    console.log('[REUPLOAD] Signed URL response status:', signedUploadRequest.status);
+    
     if (!signedUploadRequest.ok) {
       const error = await signedUploadRequest.text();
-      console.error('Failed to get signed upload URL:', error);
+      console.error('[REUPLOAD] ❌ Failed to get signed URL:', error);
       throw new Error(`Failed to get signed upload URL: ${error}`);
     }
     
@@ -214,10 +218,10 @@ serve(async (req) => {
       throw new Error('Invalid signeds3upload response: missing uploadKey or urls[0]');
     }
     
-    console.log('✅ Step 6a: Signed upload URL obtained');
+    console.log('[REUPLOAD] ✅ Got signed URL');
     
     // Step 6b: Upload file to S3
-    console.log('Step 6b: Uploading file to S3...');
+    console.log('[REUPLOAD] Uploading to S3...');
     const s3UploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
@@ -226,16 +230,18 @@ serve(async (req) => {
       body: fileBuffer,
     });
     
+    console.log('[REUPLOAD] S3 upload response status:', s3UploadResponse.status);
+    
     if (!s3UploadResponse.ok) {
-      const error = await s3UploadResponse.text();
-      console.error('Failed to upload to S3:', error);
-      throw new Error(`Failed to upload to S3: ${error}`);
+      const s3Error = await s3UploadResponse.text();
+      console.error('[REUPLOAD] ❌ S3 upload failed:', s3Error);
+      throw new Error(`S3 upload failed: ${s3UploadResponse.status} - ${s3Error}`);
     }
     
-    console.log('✅ Step 6b: File uploaded to S3');
+    console.log('[REUPLOAD] ✅ S3 upload complete');
     
     // Step 6c: Finalize upload
-    console.log('Step 6c: Finalizing upload...');
+    console.log('[REUPLOAD] Finalizing upload...');
     const finalizeResponse = await fetch(
       `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucketKey}/objects/${ossObjectKey}/signeds3upload`,
       {
@@ -248,16 +254,42 @@ serve(async (req) => {
       }
     );
     
+    console.log('[REUPLOAD] Finalize response status:', finalizeResponse.status);
+    
     if (!finalizeResponse.ok) {
       const error = await finalizeResponse.text();
-      console.error('Failed to finalize upload:', error);
+      console.error('[REUPLOAD] ❌ Finalize failed:', error);
       throw new Error(`Failed to finalize upload: ${error}`);
     }
     
-    console.log('✅ Step 6c: Upload finalized');
-    console.log('✅ File uploaded to regular OSS bucket');
-    console.log('OSS Bucket:', ossBucketKey);
-    console.log('OSS Object:', ossObjectKey);
+    console.log('[REUPLOAD] ✅ Upload finalized successfully');
+    
+    // CRITICAL: Verify object exists immediately
+    console.log('[REUPLOAD] VERIFICATION: Checking if object exists...');
+    const verifyResponse = await fetch(
+      `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucketKey}/objects/${encodeURIComponent(ossObjectKey)}/details`,
+      {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${regularToken}` }
+      }
+    );
+
+    console.log('[REUPLOAD] Verification response status:', verifyResponse.status);
+
+    if (verifyResponse.ok) {
+      const objectDetails = await verifyResponse.json();
+      console.log('[REUPLOAD] ✅ Object verified in bucket!');
+      console.log('[REUPLOAD]   - Object ID:', objectDetails.objectId);
+      console.log('[REUPLOAD]   - Size:', objectDetails.size, 'bytes');
+    } else {
+      const verifyError = await verifyResponse.text();
+      console.error('[REUPLOAD] ⚠️ Object not immediately visible:', verifyError);
+      console.error('[REUPLOAD]    This suggests eventual consistency delay or upload failure');
+    }
+    
+    console.log('[REUPLOAD] ✅ File uploaded to regular OSS bucket');
+    console.log('[REUPLOAD] OSS Bucket:', ossBucketKey);
+    console.log('[REUPLOAD] OSS Object:', ossObjectKey);
 
     return new Response(JSON.stringify({
       success: true,
