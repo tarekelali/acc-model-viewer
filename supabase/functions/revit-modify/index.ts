@@ -515,10 +515,13 @@ serve(async (req) => {
     const encodedOssObject = encodeURIComponent(ossObject);
     console.log(`[STEP 2] Encoded object name: ${encodedOssObject}`);
     
+    const ossDownloadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucket}/objects/${encodedOssObject}/signeds3download`;
+    console.log(`[STEP 2] Full OSS API URL being called: ${ossDownloadUrl}`);
+    
     let ossSignedUrlResponse;
     try {
       ossSignedUrlResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucket}/objects/${encodedOssObject}/signeds3download`,
+        ossDownloadUrl,
         { 
           method: 'POST',
           headers: { 
@@ -533,7 +536,7 @@ serve(async (req) => {
         'Network error getting OSS signed download URL',
         'OSS Signed URL',
         500,
-        { error: e instanceof Error ? e.message : String(e) }
+        { error: e instanceof Error ? e.message : String(e), url: ossDownloadUrl }
       );
     }
 
@@ -544,9 +547,10 @@ serve(async (req) => {
         'Failed to get OSS signed download URL',
         'OSS Signed URL',
         ossSignedUrlResponse.status,
-        { response: errorText, bucket: ossBucket, object: ossObject }
+        { response: errorText, bucket: ossBucket, object: ossObject, url: ossDownloadUrl }
       );
     }
+
 
     const ossSignedData = await ossSignedUrlResponse.json();
     const downloadUrl = ossSignedData.url;
