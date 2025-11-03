@@ -930,7 +930,7 @@ serve(async (req) => {
     }
 
     const transformsData = await transformsSignedResponse.json();
-    const transformsUrl = transformsData.signedUrl;
+    const transformsUrl = transformsData.url;
 
     if (!transformsUrl) {
       return createErrorResponse(
