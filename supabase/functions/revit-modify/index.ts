@@ -901,7 +901,7 @@ serve(async (req) => {
       transformsSignedResponse = await fetch(
         `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${transformsKey}/signeds3download`,
         {
-          method: 'POST',
+          method: 'GET',
           headers: {
             'Authorization': `Bearer ${twoLeggedToken}`,
             'Content-Type': 'application/json'
