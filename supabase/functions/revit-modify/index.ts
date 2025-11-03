@@ -508,8 +508,8 @@ serve(async (req) => {
     console.log('[STEP 2] Using provided OSS coordinates from SSA re-upload');
     console.log('[STEP 2] OSS Bucket:', ossBucket, 'Object:', ossObject);
     
-    // Get signed S3 download URL using OSS API with SSA token
-    console.log(`[STEP 2] Requesting signed download URL from OSS using SSA token...`);
+    // Get signed S3 download URL using OSS API with REGULAR token (same token used to upload)
+    console.log(`[STEP 2] Requesting signed download URL from OSS using REGULAR app token...`);
     
     // URL encode the object name to handle special characters like .rvt
     const encodedOssObject = encodeURIComponent(ossObject);
@@ -522,7 +522,7 @@ serve(async (req) => {
         { 
           method: 'POST',
           headers: { 
-            'Authorization': `Bearer ${ssaToken}`,
+            'Authorization': `Bearer ${twoLeggedToken}`,
             'Content-Type': 'application/json'
           }
         }
