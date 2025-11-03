@@ -43,36 +43,17 @@ serve(async (req) => {
   try {
     const { userToken, projectId, folderUrn, itemUrn, fileName } = await req.json();
 
-    console.log('Re-uploading file with SSA credentials:', { projectId, folderUrn, fileName });
+    console.log('Re-uploading file to OSS:', { projectId, folderUrn, fileName });
 
-    const ssaClientSecret = Deno.env.get('AUTODESK_SSA_CLIENT_SECRET');
-    if (!ssaClientSecret) {
-      throw new Error('AUTODESK_SSA_CLIENT_SECRET not configured - please add the m&cp-configurator app client secret');
+    // Step 1: Get regular app token (will be used for bucket creation and file upload)
+    const regularClientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
+    if (!regularClientSecret) {
+      throw new Error('AUTODESK_CLIENT_SECRET not configured');
     }
-
-    // Step 1: Get SSA 2-legged token with data:write and data:create scopes
-    console.log('Getting SSA token...');
-    const tokenResponse = await fetch('https://developer.api.autodesk.com/authentication/v2/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: SSA_CLIENT_ID,
-        client_secret: ssaClientSecret,
-        scope: 'data:read data:write data:create code:all',
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      const error = await tokenResponse.text();
-      throw new Error(`Failed to get SSA token: ${error}`);
-    }
-
-    const tokenData = await tokenResponse.json();
-    const ssaToken = tokenData.access_token;
-    console.log('SSA token obtained successfully');
+    
+    console.log('Getting regular app token...');
+    const regularToken = await getRegularAppToken(regularClientSecret);
+    console.log('Regular app token obtained successfully');
 
     // Step 2: Download the existing file using user's token
     console.log('Getting storage location for existing file...');
@@ -175,15 +156,8 @@ serve(async (req) => {
     console.log('Target OSS Bucket:', ossBucketKey);
     console.log('Target OSS Object:', ossObjectKey);
     
-    // Step 5.1: Ensure OSS bucket exists using REGULAR app token
-    // Get regular app client secret
-    const regularClientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
-    if (!regularClientSecret) {
-      throw new Error('AUTODESK_CLIENT_SECRET not configured');
-    }
-    
-    // Try to create bucket with regular app token (has bucket:create privilege)
-    const regularToken = await getRegularAppToken(regularClientSecret);
+    // Step 5.1: Ensure OSS bucket exists using regular app token
+    console.log('Creating/checking bucket with regular app token...');
     
     const createBucketResponse = await fetch(
       'https://developer.api.autodesk.com/oss/v2/buckets',
@@ -221,7 +195,7 @@ serve(async (req) => {
       {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${ssaToken}`,
+          'Authorization': `Bearer ${regularToken}`,
         },
       }
     );
@@ -267,7 +241,7 @@ serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${ssaToken}`,
+          'Authorization': `Bearer ${regularToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ uploadKey }),
