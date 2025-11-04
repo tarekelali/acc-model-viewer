@@ -142,19 +142,39 @@ async function uploadAppBundle(token, uploadParams) {
   console.log('✅ AppBundle ZIP uploaded');
 }
 
-// Create AppBundle alias
-async function createAppBundleAlias(token) {
-  console.log('\n🏷️  Creating AppBundle alias...');
+// Get latest AppBundle version
+async function getLatestAppBundleVersion(token) {
+  console.log('\n🔍 Getting latest AppBundle version...');
   
-  const aliasSpec = {
-    id: 'v1',
-    version: 1
-  };
-
   const options = {
     hostname: 'developer.api.autodesk.com',
-    path: `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/aliases`,
-    method: 'POST',
+    path: `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/versions`,
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  };
+
+  const result = await makeRequest(options);
+  const versions = result.data.data || [];
+  const latestVersion = Math.max(...versions);
+  console.log(`✅ Latest AppBundle version: ${latestVersion}`);
+  return latestVersion;
+}
+
+// Create or update AppBundle alias
+async function createOrUpdateAppBundleAlias(token, version) {
+  console.log(`\n🏷️  Updating AppBundle alias to version ${version}...`);
+  
+  const aliasSpec = {
+    version: version
+  };
+
+  // Try to update existing alias first (PATCH)
+  let options = {
+    hostname: 'developer.api.autodesk.com',
+    path: `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/aliases/v1`,
+    method: 'PATCH',
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
@@ -163,10 +183,17 @@ async function createAppBundleAlias(token) {
 
   try {
     await makeRequest(options, aliasSpec);
-    console.log('✅ AppBundle alias created');
+    console.log('✅ AppBundle alias updated to latest version');
   } catch (error) {
-    if (error.message.includes('409')) {
-      console.log('⚠️  Alias already exists, continuing...');
+    if (error.message.includes('404')) {
+      // Alias doesn't exist, create it
+      console.log('⚠️  Alias not found, creating new alias...');
+      options.method = 'POST';
+      options.path = `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/aliases`;
+      aliasSpec.id = 'v1';
+      
+      await makeRequest(options, aliasSpec);
+      console.log('✅ AppBundle alias created');
     } else {
       throw error;
     }
@@ -226,19 +253,39 @@ async function createActivity(token) {
   }
 }
 
-// Create Activity alias
-async function createActivityAlias(token) {
-  console.log('\n🏷️  Creating Activity alias...');
+// Get latest Activity version
+async function getLatestActivityVersion(token) {
+  console.log('\n🔍 Getting latest Activity version...');
   
-  const aliasSpec = {
-    id: 'v1',
-    version: 1
-  };
-
   const options = {
     hostname: 'developer.api.autodesk.com',
-    path: `/da/us-east/v3/activities/${ACTIVITY_NAME}/aliases`,
-    method: 'POST',
+    path: `/da/us-east/v3/activities/${ACTIVITY_NAME}/versions`,
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  };
+
+  const result = await makeRequest(options);
+  const versions = result.data.data || [];
+  const latestVersion = Math.max(...versions);
+  console.log(`✅ Latest Activity version: ${latestVersion}`);
+  return latestVersion;
+}
+
+// Create or update Activity alias
+async function createOrUpdateActivityAlias(token, version) {
+  console.log(`\n🏷️  Updating Activity alias to version ${version}...`);
+  
+  const aliasSpec = {
+    version: version
+  };
+
+  // Try to update existing alias first (PATCH)
+  let options = {
+    hostname: 'developer.api.autodesk.com',
+    path: `/da/us-east/v3/activities/${ACTIVITY_NAME}/aliases/v1`,
+    method: 'PATCH',
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
@@ -247,10 +294,17 @@ async function createActivityAlias(token) {
 
   try {
     await makeRequest(options, aliasSpec);
-    console.log('✅ Activity alias created');
+    console.log('✅ Activity alias updated to latest version');
   } catch (error) {
-    if (error.message.includes('409')) {
-      console.log('⚠️  Alias already exists, continuing...');
+    if (error.message.includes('404')) {
+      // Alias doesn't exist, create it
+      console.log('⚠️  Alias not found, creating new alias...');
+      options.method = 'POST';
+      options.path = `/da/us-east/v3/activities/${ACTIVITY_NAME}/aliases`;
+      aliasSpec.id = 'v1';
+      
+      await makeRequest(options, aliasSpec);
+      console.log('✅ Activity alias created');
     } else {
       throw error;
     }
@@ -276,14 +330,20 @@ async function setup() {
       console.log('⚠️  No upload needed (AppBundle already exists)');
     }
     
-    await createAppBundleAlias(token);
+    // Get latest AppBundle version and update alias
+    const latestAppBundleVersion = await getLatestAppBundleVersion(token);
+    await createOrUpdateAppBundleAlias(token, latestAppBundleVersion);
+    
     await createActivity(token);
-    await createActivityAlias(token);
+    
+    // Get latest Activity version and update alias
+    const latestActivityVersion = await getLatestActivityVersion(token);
+    await createOrUpdateActivityAlias(token, latestActivityVersion);
 
     console.log('\n✨ Setup completed successfully!');
     console.log('\n📋 Summary:');
-    console.log(`   AppBundle: ${CLIENT_ID}.${APPBUNDLE_NAME}+v1`);
-    console.log(`   Activity: ${CLIENT_ID}.${ACTIVITY_NAME}+v1`);
+    console.log(`   AppBundle: ${CLIENT_ID}.${APPBUNDLE_NAME}+v1 (→ version ${latestAppBundleVersion})`);
+    console.log(`   Activity: ${CLIENT_ID}.${ACTIVITY_NAME}+v1 (→ version ${latestActivityVersion})`);
     console.log('\n🎉 Your edge function is now ready to use Design Automation!');
     console.log('   Try moving an element in the viewer and clicking Save.');
 
