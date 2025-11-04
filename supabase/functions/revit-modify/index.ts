@@ -1118,6 +1118,12 @@ serve(async (req) => {
             if (reportResponse.ok) {
               reportContent = await reportResponse.text();
               console.log('[STEP 7] ✓ Report fetched successfully');
+              
+              if (reportContent) {
+                console.log('=== REPORT TAIL (last 1000 chars) ===');
+                console.log(reportContent.slice(-1000));
+                console.log('=== END REPORT ===');
+              }
             } else {
               console.error('[STEP 7] Failed to fetch report:', reportResponse.status);
             }
