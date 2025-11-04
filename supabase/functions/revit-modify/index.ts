@@ -1109,6 +1109,23 @@ serve(async (req) => {
       });
       
       if (status === 'failedInstructions' || status === 'failedUpload' || status === 'failedDownload') {
+        // Fetch the report to get detailed error logs
+        let reportContent = null;
+        if (statusData.reportUrl) {
+          try {
+            console.log('[STEP 7] Fetching Design Automation report...');
+            const reportResponse = await fetch(statusData.reportUrl);
+            if (reportResponse.ok) {
+              reportContent = await reportResponse.text();
+              console.log('[STEP 7] ✓ Report fetched successfully');
+            } else {
+              console.error('[STEP 7] Failed to fetch report:', reportResponse.status);
+            }
+          } catch (e) {
+            console.error('[STEP 7] Error fetching report:', e);
+          }
+        }
+        
         return createErrorResponse(
           ErrorType.WORKITEM_FAILED,
           `WorkItem failed with status: ${status}`,
@@ -1118,8 +1135,9 @@ serve(async (req) => {
             workItemId,
             status,
             reportUrl: statusData.reportUrl,
+            reportContent,
             stats: statusData.stats,
-            message: 'Check the Design Automation report URL for detailed error logs'
+            message: 'Check the Design Automation report for detailed error logs'
           }
         );
       }
