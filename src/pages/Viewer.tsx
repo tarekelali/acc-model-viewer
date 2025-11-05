@@ -853,14 +853,19 @@ const Viewer = () => {
           return;
         }
 
-        // Create composite key: uniqueId-dbIdInHex (matches C# plugin's expected format)
-        // The C# plugin splits by '-' and extracts the last segment as the dbId
-        const dbIdHex = change.dbId.toString(16);
-        const compositeKey = `${change.uniqueId}-${dbIdHex}`;
+        // Use uniqueId as-is - it already contains the Revit element ID in hex format at the end
+        // Format: {Revit-GUID}-{RevitElementIdHex}
+        // The viewer's dbId is different from the Revit element ID, so we don't use it
+        const compositeKey = change.uniqueId;
 
-        console.log('dbId (decimal):', change.dbId);
-        console.log('dbId (hex):', dbIdHex);
-        console.log('Composite key:', compositeKey);
+        console.log('Viewer dbId (decimal):', change.dbId);
+        console.log('Using uniqueId as key (already contains Revit element ID):', compositeKey);
+        
+        // Parse and display the Revit element ID from the uniqueId
+        const parts = compositeKey.split('-');
+        const revitIdHex = parts[parts.length - 1];
+        const revitIdDecimal = parseInt(revitIdHex, 16);
+        console.log('Revit element ID (hex):', revitIdHex, '(decimal):', revitIdDecimal);
 
         // Validate composite key format
         if (!compositeKey.includes('-') || compositeKey.split('-').length < 2) {
