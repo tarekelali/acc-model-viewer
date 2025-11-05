@@ -954,23 +954,18 @@ const Viewer = () => {
           return;
         }
 
-        // Use uniqueId as-is - it already contains the Revit element ID in hex format at the end
-        // Format: {Revit-GUID}-{RevitElementIdHex}
-        // The viewer's dbId is different from the Revit element ID, so we don't use it
+        // Use uniqueId as-is since it already contains the Revit element ID in hex format
+        // The Revit UniqueId format is: [GUID]-[ElementId in hex]
+        // Example: "8F0B7F3F-D7D8-4B8E-9F3E-1A2B3C4D5E6F-0001f43b"
         const compositeKey = change.uniqueId;
 
-        console.log('Viewer dbId (decimal):', change.dbId);
-        console.log('Using uniqueId as key (already contains Revit element ID):', compositeKey);
-        
-        // Parse and display the Revit element ID from the uniqueId
-        const parts = compositeKey.split('-');
-        const revitIdHex = parts[parts.length - 1];
-        const revitIdDecimal = parseInt(revitIdHex, 16);
-        console.log('Revit element ID (hex):', revitIdHex, '(decimal):', revitIdDecimal);
+        console.log('dbId (decimal):', change.dbId);
+        console.log('uniqueId (contains element ID):', change.uniqueId);
+        console.log('Composite key:', compositeKey);
 
-        // Validate composite key format
-        if (!compositeKey.includes('-') || compositeKey.split('-').length < 2) {
-          const error = `Element ${change.elementName}: Invalid composite key format (${compositeKey})`;
+        // Validate composite key format (should contain at least one dash for Revit UniqueId)
+        if (!compositeKey || !compositeKey.includes('-')) {
+          const error = `Element ${change.elementName}: Invalid uniqueId format (${compositeKey})`;
           validationErrors.push(error);
           console.error('❌ VALIDATION ERROR:', error);
           return;
