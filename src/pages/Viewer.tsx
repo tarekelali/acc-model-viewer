@@ -807,19 +807,68 @@ const Viewer = () => {
         return;
       }
 
-      // Transform pendingChanges array into object format
+      // Transform pendingChanges array into Cursor's expected object format
       const transformsObject: Record<string, { translation: { x: number; y: number; z: number } }> = {};
+      const validationErrors: string[] = [];
 
-      pendingChanges.forEach(change => {
+      console.log('=== Transform Creation Debug ===');
+      console.log(`Processing ${pendingChanges.length} pending changes`);
+
+      pendingChanges.forEach((change, index) => {
+        console.log(`\n--- Change ${index + 1}/${pendingChanges.length} ---`);
+        console.log('Element:', change.elementName);
+        console.log('dbId:', change.dbId);
+        console.log('uniqueId:', change.uniqueId);
+
+        // Validate uniqueId
+        if (!change.uniqueId || change.uniqueId.trim() === '') {
+          const error = `Element ${change.elementName} (dbId: ${change.dbId}): Missing or empty uniqueId`;
+          validationErrors.push(error);
+          console.error('❌ VALIDATION ERROR:', error);
+          return;
+        }
+
+        // Validate dbId
+        if (!Number.isInteger(change.dbId) || change.dbId <= 0) {
+          const error = `Element ${change.elementName}: Invalid dbId (${change.dbId})`;
+          validationErrors.push(error);
+          console.error('❌ VALIDATION ERROR:', error);
+          return;
+        }
+
         // Calculate translation delta (difference between new and original positions)
         const deltaX = change.newPosition.x - change.originalPosition.x;
         const deltaY = change.newPosition.y - change.originalPosition.y;
         const deltaZ = change.newPosition.z - change.originalPosition.z;
 
+        console.log('Original position:', change.originalPosition);
+        console.log('New position:', change.newPosition);
+        console.log('Delta:', { x: deltaX, y: deltaY, z: deltaZ });
+
+        // Validate translation values
+        if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY) || !Number.isFinite(deltaZ)) {
+          const error = `Element ${change.elementName}: Invalid translation values (NaN or Infinity)`;
+          validationErrors.push(error);
+          console.error('❌ VALIDATION ERROR:', error);
+          return;
+        }
+
         // Create composite key: uniqueId-dbIdInHex (matches C# plugin's expected format)
         // The C# plugin splits by '-' and extracts the last segment as the dbId
         const dbIdHex = change.dbId.toString(16);
         const compositeKey = `${change.uniqueId}-${dbIdHex}`;
+
+        console.log('dbId (decimal):', change.dbId);
+        console.log('dbId (hex):', dbIdHex);
+        console.log('Composite key:', compositeKey);
+
+        // Validate composite key format
+        if (!compositeKey.includes('-') || compositeKey.split('-').length < 2) {
+          const error = `Element ${change.elementName}: Invalid composite key format (${compositeKey})`;
+          validationErrors.push(error);
+          console.error('❌ VALIDATION ERROR:', error);
+          return;
+        }
 
         transformsObject[compositeKey] = {
           translation: {
@@ -828,7 +877,24 @@ const Viewer = () => {
             z: deltaZ
           }
         };
+
+        console.log('✓ Transform added successfully');
       });
+
+      console.log('\n=== Transform Validation Summary ===');
+      console.log(`Total changes: ${pendingChanges.length}`);
+      console.log(`Valid transforms: ${Object.keys(transformsObject).length}`);
+      console.log(`Validation errors: ${validationErrors.length}`);
+
+      if (validationErrors.length > 0) {
+        console.error('\n❌ Validation Errors:');
+        validationErrors.forEach(err => console.error(`  - ${err}`));
+        throw new Error(`Transform validation failed with ${validationErrors.length} error(s). Check console for details.`);
+      }
+
+      console.log('✓ All transforms validated successfully');
+      console.log('\nFinal transforms object:');
+      console.log(JSON.stringify(transformsObject, null, 2));
 
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const baseUrl = 'https://mbkfbmsjwlgqyzhfjwka.supabase.co/functions/v1';
@@ -846,29 +912,80 @@ const Viewer = () => {
       // STEP 1: Start the job
       toast('Starting Design Automation job...');
       
+      const requestPayload = {
+        token: accessToken,
+        itemId: currentItemId,
+        projectId: currentProjectId,
+        folderUrn: currentFolderUrn,
+        transforms: transformsObject,
+        ossBucket: ossCoordinates.bucket,
+        ossObject: ossCoordinates.object
+      };
+
+      // Log the full request payload for debugging
+      console.log('\n=== Design Automation Request Debug ===');
+      console.log('Request payload summary:');
+      console.log({
+        hasToken: !!accessToken,
+        tokenLength: accessToken?.length,
+        itemId: requestPayload.itemId,
+        projectId: requestPayload.projectId,
+        folderUrn: requestPayload.folderUrn,
+        transformCount: Object.keys(transformsObject).length,
+        hasOssCoordinates: !!(requestPayload.ossBucket && requestPayload.ossObject),
+        ossBucket: requestPayload.ossBucket,
+        ossObject: requestPayload.ossObject
+      });
+
+      console.log('\n=== Transform Keys Being Sent ===');
+      Object.keys(transformsObject).forEach((key, index) => {
+        const parts = key.split('-');
+        const dbIdHex = parts[parts.length - 1];
+        const dbIdDecimal = parseInt(dbIdHex, 16);
+        console.log(`${index + 1}. Key: "${key}"`);
+        console.log(`   - UniqueId: "${parts.slice(0, -1).join('-')}"`);
+        console.log(`   - dbId (hex): ${dbIdHex}`);
+        console.log(`   - dbId (decimal): ${dbIdDecimal}`);
+        console.log(`   - Translation:`, transformsObject[key].translation);
+      });
+
+      console.log('\n=== Full Request Payload ===');
+      console.log(JSON.stringify(requestPayload, null, 2));
+      
       const startResponse = await fetch(`${baseUrl}/revit-modify`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          token: accessToken,
-          itemId: currentItemId,
-          projectId: currentProjectId,
-          folderUrn: currentFolderUrn,
-          transforms: transformsObject,
-          ossBucket: ossCoordinates.bucket,
-          ossObject: ossCoordinates.object
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
-      if (!startResponse.ok) {
-        const error = await startResponse.json();
-        throw new Error(error.error || error.message || 'Failed to start job');
-      }
+      console.log('\n=== Design Automation Start Response ===');
+      console.log('Response status:', startResponse.status, startResponse.statusText);
+      console.log('Response headers:', Object.fromEntries(startResponse.headers.entries()));
 
       const startResult = await startResponse.json();
-      const { workItemId, bucketKeyTemp, outputObjectKey } = startResult;
+      console.log('Response body:', startResult);
 
-      console.log('WorkItem created:', workItemId);
+      if (!startResponse.ok || !startResult.workItemId) {
+        console.error('\n❌ Design Automation Start Failed');
+        console.error('Response status:', startResponse.status);
+        console.error('Response body:', startResult);
+
+        // Log any error details from the response
+        if (startResult.error) {
+          console.error('Error details:', startResult.error);
+        }
+        if (startResult.message) {
+          console.error('Error message:', startResult.message);
+        }
+        if (startResult.stack) {
+          console.error('Stack trace:', startResult.stack);
+        }
+
+        throw new Error(startResult.message || startResult.error || 'Failed to start Design Automation job');
+      }
+
+      const { workItemId, bucketKeyTemp, outputObjectKey } = startResult;
+      console.log('✓ WorkItem created:', workItemId);
 
       // STEP 2: Poll for status
       let attempts = 0;
@@ -888,19 +1005,32 @@ const Viewer = () => {
         });
 
         if (!statusResponse.ok) {
-          console.error('Status check failed:', statusResponse.status);
-          continue; // Retry
+          console.warn(`⚠️ Status check failed (attempt ${attempts}):`, statusResponse.status, statusResponse.statusText);
+          continue;
         }
 
         const statusData = await statusResponse.json();
         const status = statusData.status;
 
-        console.log(`Poll attempt ${attempts}: status = ${status}`);
+        console.log(`\n📊 Work item status (attempt ${attempts}):`, status);
+        if (statusData.progress) {
+          console.log('Progress:', statusData.progress);
+        }
+
         toast(`Processing... (${attempts * 10}s elapsed, status: ${status})`);
 
         if (status === 'success') {
-          // STEP 3: Complete the job
-          toast('WorkItem succeeded! Uploading to ACC...');
+          console.log('\n✓ Design Automation processing completed successfully!');
+          toast('Processing complete - uploading to ACC...');
+
+          // STEP 3: Complete the upload to ACC
+          console.log('\n=== Starting ACC Upload ===');
+          console.log('Upload parameters:', {
+            projectId: currentProjectId,
+            itemId: currentItemId,
+            bucketKeyTemp,
+            outputObjectKey
+          });
 
           const completeResponse = await fetch(`${baseUrl}/revit-complete`, {
             method: 'POST',
@@ -909,19 +1039,25 @@ const Viewer = () => {
               token: accessToken,
               projectId: currentProjectId,
               itemId: currentItemId,
-              folderUrn: currentFolderUrn,
               bucketKeyTemp,
               outputObjectKey
             }),
           });
 
+          console.log('Upload response status:', completeResponse.status, completeResponse.statusText);
+
+          const completeResult = await completeResponse.json();
+          console.log('Upload response body:', completeResult);
+
           if (!completeResponse.ok) {
-            const error = await completeResponse.json();
-            throw new Error(error.error || 'Failed to complete job');
+            console.error('\n❌ ACC Upload Failed');
+            console.error('Response status:', completeResponse.status);
+            console.error('Response body:', completeResult);
+            throw new Error(completeResult.error || completeResult.message || 'Failed to upload to ACC');
           }
 
-          const result = await completeResponse.json();
-          toast.success(`Changes saved! New version: ${result.versionId}`);
+          console.log('\n✓ Upload complete successfully!');
+          toast.success(`Changes saved! New version: ${completeResult.versionId}`);
           
           // Clear pending changes
           setPendingChanges([]);
@@ -929,10 +1065,19 @@ const Viewer = () => {
         }
 
         if (status.startsWith('failed')) {
-          const errorMessage = statusData.reportContent 
-            ? `WorkItem failed: ${statusData.reportContent.slice(-500)}`
-            : `WorkItem failed with status: ${status}`;
-          throw new Error(errorMessage);
+          console.error('\n❌ Design Automation Job Failed');
+          console.error('Status:', status);
+          console.error('Full status result:', statusData);
+
+          if (statusData.reportContent) {
+            console.error('\n📄 Report Content (last 1000 chars):');
+            console.error(statusData.reportContent.slice(-1000));
+          }
+
+          const errorMsg = statusData.reportContent
+            ? `Design Automation failed: ${statusData.reportContent.slice(-500)}`
+            : 'Design Automation job failed';
+          throw new Error(errorMsg);
         }
 
         // Status is 'pending' or 'inprogress', continue polling
