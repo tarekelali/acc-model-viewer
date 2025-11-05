@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload, Download } from "lucide-react";
+import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload, Download, Trash2, Filter } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -71,6 +71,8 @@ const Viewer = () => {
   const [isReuploading, setIsReuploading] = useState(false);
   const [ossCoordinates, setOssCoordinates] = useState<{ bucket: string; object: string } | null>(null);
   const [debugLogs, setDebugLogs] = useState<Array<{ timestamp: string; type: string; message: string }>>([]);
+  const [logFilter, setLogFilter] = useState<'all' | 'log' | 'error' | 'warn'>('all');
+  const [showLogPanel, setShowLogPanel] = useState(false);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -826,8 +828,17 @@ const Viewer = () => {
     setShowSaveDialog(true);
   };
 
+  const getFilteredLogsCount = (filterType: 'all' | 'log' | 'error' | 'warn') => {
+    if (filterType === 'all') return debugLogs.length;
+    return debugLogs.filter(log => log.type === filterType).length;
+  };
+
   const downloadDebugLogs = () => {
-    const logContent = debugLogs.map(log => 
+    const filteredLogs = logFilter === 'all' 
+      ? debugLogs 
+      : debugLogs.filter(log => log.type === logFilter);
+    
+    const logContent = filteredLogs.map(log => 
       `[${log.timestamp}] [${log.type.toUpperCase()}] ${log.message}`
     ).join('\n\n');
     
@@ -835,13 +846,18 @@ const Viewer = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `debug-logs-${new Date().toISOString()}.txt`;
+    a.download = `debug-logs-${logFilter}-${new Date().toISOString()}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    toast.success('Debug logs downloaded');
+    toast.success(`Downloaded ${filteredLogs.length} ${logFilter === 'all' ? '' : logFilter + ' '}logs`);
+  };
+
+  const clearDebugLogs = () => {
+    setDebugLogs([]);
+    toast.success('Debug logs cleared');
   };
 
   const confirmSave = async () => {
@@ -1414,11 +1430,11 @@ const Viewer = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={downloadDebugLogs}
+              onClick={() => setShowLogPanel(!showLogPanel)}
               className="hover:bg-secondary gap-2"
-              title="Download Debug Logs"
+              title="Toggle Debug Log Panel"
             >
-              <Download className="h-4 w-4" />
+              <Filter className="h-4 w-4" />
               <span className="text-xs">Logs ({debugLogs.length})</span>
             </Button>
           </div>
@@ -1478,6 +1494,130 @@ const Viewer = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Debug Log Panel */}
+        {showLogPanel && (
+          <div className="absolute top-4 right-4 bg-card border border-border rounded-lg shadow-lg w-96 max-h-[600px] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-3 border-b border-border">
+              <h3 className="font-semibold text-foreground">
+                Debug Logs ({getFilteredLogsCount(logFilter)}/{debugLogs.length})
+              </h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowLogPanel(false)}
+                className="h-6 w-6"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="flex gap-2 p-3 border-b border-border">
+              <Button
+                variant={logFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setLogFilter('all')}
+                className="flex-1"
+              >
+                All ({debugLogs.length})
+              </Button>
+              <Button
+                variant={logFilter === 'log' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setLogFilter('log')}
+                className="flex-1"
+              >
+                Log ({getFilteredLogsCount('log')})
+              </Button>
+              <Button
+                variant={logFilter === 'error' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setLogFilter('error')}
+                className="flex-1"
+              >
+                Error ({getFilteredLogsCount('error')})
+              </Button>
+              <Button
+                variant={logFilter === 'warn' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setLogFilter('warn')}
+                className="flex-1"
+              >
+                Warn ({getFilteredLogsCount('warn')})
+              </Button>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 p-3 border-b border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadDebugLogs}
+                className="flex-1 gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearDebugLogs}
+                className="flex-1 gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Clear
+              </Button>
+            </div>
+
+            {/* Log List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {(() => {
+                const filteredLogs = logFilter === 'all' 
+                  ? debugLogs 
+                  : debugLogs.filter(log => log.type === logFilter);
+                
+                if (filteredLogs.length === 0) {
+                  return (
+                    <div className="text-center text-muted-foreground text-sm py-8">
+                      No {logFilter === 'all' ? '' : logFilter + ' '}logs yet
+                    </div>
+                  );
+                }
+
+                return [...filteredLogs].reverse().map((log, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`p-2 rounded border text-xs ${
+                      log.type === 'error' 
+                        ? 'border-red-500/50 bg-red-500/10' 
+                        : log.type === 'warn' 
+                          ? 'border-yellow-500/50 bg-yellow-500/10'
+                          : 'border-border bg-muted/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-semibold uppercase ${
+                        log.type === 'error' ? 'text-red-500' 
+                        : log.type === 'warn' ? 'text-yellow-500'
+                        : 'text-foreground'
+                      }`}>
+                        {log.type}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
+                      {log.message}
+                    </pre>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         )}
