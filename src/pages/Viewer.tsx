@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload } from "lucide-react";
+import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -70,6 +70,7 @@ const Viewer = () => {
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [isReuploading, setIsReuploading] = useState(false);
   const [ossCoordinates, setOssCoordinates] = useState<{ bucket: string; object: string } | null>(null);
+  const [debugLogs, setDebugLogs] = useState<Array<{ timestamp: string; type: string; message: string }>>([]);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -81,6 +82,46 @@ const Viewer = () => {
     // Otherwise return as-is (already a project ID)
     return input.trim();
   };
+
+  // Intercept console logs for debug download
+  useEffect(() => {
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+
+    console.log = (...args: any[]) => {
+      setDebugLogs(prev => [...prev, {
+        timestamp: new Date().toISOString(),
+        type: 'log',
+        message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ')
+      }]);
+      originalLog(...args);
+    };
+
+    console.error = (...args: any[]) => {
+      setDebugLogs(prev => [...prev, {
+        timestamp: new Date().toISOString(),
+        type: 'error',
+        message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ')
+      }]);
+      originalError(...args);
+    };
+
+    console.warn = (...args: any[]) => {
+      setDebugLogs(prev => [...prev, {
+        timestamp: new Date().toISOString(),
+        type: 'warn',
+        message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ')
+      }]);
+      originalWarn(...args);
+    };
+
+    return () => {
+      console.log = originalLog;
+      console.error = originalError;
+      console.warn = originalWarn;
+    };
+  }, []);
 
   // Check for auth callback or load stored tokens
   useEffect(() => {
@@ -785,6 +826,24 @@ const Viewer = () => {
     setShowSaveDialog(true);
   };
 
+  const downloadDebugLogs = () => {
+    const logContent = debugLogs.map(log => 
+      `[${log.timestamp}] [${log.type.toUpperCase()}] ${log.message}`
+    ).join('\n\n');
+    
+    const blob = new Blob([logContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `debug-logs-${new Date().toISOString()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast.success('Debug logs downloaded');
+  };
+
   const confirmSave = async () => {
     setIsSaving(true);
     setShowSaveDialog(false);
@@ -945,12 +1004,13 @@ const Viewer = () => {
       console.log('\n=== Transform Keys Being Sent ===');
       Object.keys(transformsObject).forEach((key, index) => {
         const parts = key.split('-');
-        const dbIdHex = parts[parts.length - 1];
-        const dbIdDecimal = parseInt(dbIdHex, 16);
+        const guidPart = parts.slice(0, -1).join('-');
+        const revitIdHex = parts[parts.length - 1];
+        const revitIdDecimal = parseInt(revitIdHex, 16);
         console.log(`${index + 1}. Key: "${key}"`);
-        console.log(`   - UniqueId: "${parts.slice(0, -1).join('-')}"`);
-        console.log(`   - dbId (hex): ${dbIdHex}`);
-        console.log(`   - dbId (decimal): ${dbIdDecimal}`);
+        console.log(`   - GUID part: "${guidPart}"`);
+        console.log(`   - Revit Element ID (hex): ${revitIdHex}`);
+        console.log(`   - Revit Element ID (decimal): ${revitIdDecimal}`);
         console.log(`   - Translation:`, transformsObject[key].translation);
       });
 
@@ -1350,6 +1410,16 @@ const Viewer = () => {
               className="hover:bg-secondary"
             >
               <Layers className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={downloadDebugLogs}
+              className="hover:bg-secondary gap-2"
+              title="Download Debug Logs"
+            >
+              <Download className="h-4 w-4" />
+              <span className="text-xs">Logs ({debugLogs.length})</span>
             </Button>
           </div>
         </div>
