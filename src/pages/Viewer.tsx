@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload, Download, Trash2, Filter } from "lucide-react";
+import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload, Download, Trash2, Filter, Search, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -73,6 +73,9 @@ const Viewer = () => {
   const [debugLogs, setDebugLogs] = useState<Array<{ timestamp: string; type: string; message: string }>>([]);
   const [logFilter, setLogFilter] = useState<'all' | 'log' | 'error' | 'warn'>('all');
   const [showLogPanel, setShowLogPanel] = useState(false);
+  const [logSearchText, setLogSearchText] = useState('');
+  const [autoScroll, setAutoScroll] = useState(true);
+  const logListRef = useRef<HTMLDivElement>(null);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -833,6 +836,29 @@ const Viewer = () => {
     return debugLogs.filter(log => log.type === filterType).length;
   };
 
+  const getFilteredAndSearchedLogs = () => {
+    let filtered = logFilter === 'all'
+      ? debugLogs
+      : debugLogs.filter(log => log.type === logFilter);
+
+    if (logSearchText.trim()) {
+      const searchLower = logSearchText.toLowerCase();
+      filtered = filtered.filter(log =>
+        log.message.toLowerCase().includes(searchLower) ||
+        log.type.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  };
+
+  // Auto-scroll effect
+  useEffect(() => {
+    if (autoScroll && logListRef.current) {
+      logListRef.current.scrollTop = logListRef.current.scrollHeight;
+    }
+  }, [debugLogs, autoScroll]);
+
   const downloadDebugLogs = () => {
     const filteredLogs = logFilter === 'all' 
       ? debugLogs 
@@ -1504,7 +1530,7 @@ const Viewer = () => {
             {/* Header */}
             <div className="flex items-center justify-between p-3 border-b border-border">
               <h3 className="font-semibold text-foreground">
-                Debug Logs ({getFilteredLogsCount(logFilter)}/{debugLogs.length})
+                Debug Logs ({getFilteredAndSearchedLogs().length}/{debugLogs.length})
               </h3>
               <Button
                 variant="ghost"
@@ -1552,6 +1578,28 @@ const Viewer = () => {
               </Button>
             </div>
 
+            {/* Search Input */}
+            <div className="p-3 border-b border-border">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={logSearchText}
+                  onChange={(e) => setLogSearchText(e.target.value)}
+                  placeholder="Search logs..."
+                  className="w-full h-8 pl-9 pr-8 text-xs rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+                {logSearchText && (
+                  <button
+                    onClick={() => setLogSearchText('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Action Buttons */}
             <div className="flex gap-2 p-3 border-b border-border">
               <Button
@@ -1572,24 +1620,29 @@ const Viewer = () => {
                 <Trash2 className="h-4 w-4" />
                 Clear
               </Button>
+              <Button
+                variant={autoScroll ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setAutoScroll(!autoScroll)}
+                className="gap-2"
+                title={autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
+              >
+                <ArrowDown className="h-3 w-3" />
+              </Button>
             </div>
 
             {/* Log List */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {(() => {
-                const filteredLogs = logFilter === 'all' 
-                  ? debugLogs 
-                  : debugLogs.filter(log => log.type === logFilter);
-                
-                if (filteredLogs.length === 0) {
-                  return (
-                    <div className="text-center text-muted-foreground text-sm py-8">
-                      No {logFilter === 'all' ? '' : logFilter + ' '}logs yet
-                    </div>
-                  );
-                }
-
-                return [...filteredLogs].reverse().map((log, idx) => (
+            <div ref={logListRef} className="flex-1 overflow-y-auto p-3 space-y-2">
+              {debugLogs.length === 0 ? (
+                <div className="text-center text-muted-foreground text-sm py-8">
+                  No logs captured yet
+                </div>
+              ) : getFilteredAndSearchedLogs().length === 0 ? (
+                <div className="text-center text-muted-foreground text-sm py-8">
+                  No logs match your search
+                </div>
+              ) : (
+                [...getFilteredAndSearchedLogs()].reverse().map((log, idx) => (
                   <div 
                     key={idx} 
                     className={`p-2 rounded border text-xs ${
@@ -1616,8 +1669,8 @@ const Viewer = () => {
                       {log.message}
                     </pre>
                   </div>
-                ));
-              })()}
+                ))
+              )}
             </div>
           </div>
         )}
