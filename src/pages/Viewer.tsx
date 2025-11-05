@@ -914,6 +914,7 @@ const Viewer = () => {
 
       console.log('=== Transform Creation Debug ===');
       console.log(`Processing ${pendingChanges.length} pending changes`);
+      toast(`Preparing ${pendingChanges.length} transform(s) for save...`);
 
       pendingChanges.forEach((change, index) => {
         console.log(`\n--- Change ${index + 1}/${pendingChanges.length} ---`);
@@ -990,12 +991,14 @@ const Viewer = () => {
       if (validationErrors.length > 0) {
         console.error('\n❌ Validation Errors:');
         validationErrors.forEach(err => console.error(`  - ${err}`));
+        toast.error(`Validation failed: ${validationErrors.length} error(s). Check console.`);
         throw new Error(`Transform validation failed with ${validationErrors.length} error(s). Check console for details.`);
       }
 
       console.log('✓ All transforms validated successfully');
       console.log('\nFinal transforms object:');
       console.log(JSON.stringify(transformsObject, null, 2));
+      toast.success(`✓ Validated ${Object.keys(transformsObject).length} transform(s)`);
 
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const baseUrl = 'https://mbkfbmsjwlgqyzhfjwka.supabase.co/functions/v1';
@@ -1011,7 +1014,7 @@ const Viewer = () => {
       };
 
       // STEP 1: Start the job
-      toast('Starting Design Automation job...');
+      toast(`Starting Design Automation job with ${Object.keys(transformsObject).length} transform(s)...`);
       
       const requestPayload = {
         token: accessToken,
@@ -1088,6 +1091,8 @@ const Viewer = () => {
 
       const { workItemId, bucketKeyTemp, outputObjectKey } = startResult;
       console.log('✓ WorkItem created:', workItemId);
+      console.log(`✓ Submitted ${Object.keys(transformsObject).length} transform(s) to Design Automation`);
+      toast.success(`Processing ${Object.keys(transformsObject).length} transform(s)...`);
 
       // STEP 2: Poll for status
       let attempts = 0;
@@ -1159,7 +1164,8 @@ const Viewer = () => {
           }
 
           console.log('\n✓ Upload complete successfully!');
-          toast.success(`Changes saved! New version: ${completeResult.versionId}`);
+          console.log(`✓ ${Object.keys(transformsObject).length} transform(s) applied to Revit file`);
+          toast.success(`✓ Saved ${Object.keys(transformsObject).length} transform(s) to Revit file! New version: ${completeResult.versionId}`);
           
           // Clear pending changes
           setPendingChanges([]);
