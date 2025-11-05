@@ -801,113 +801,135 @@ const Viewer = () => {
         throw new Error('No folder URN available');
       }
 
-      toast('Initiating save to Revit file...');
-
-      // Transform pendingChanges array into Cursor's expected object format
-      const transformsObject: Record<string, { translation: { x: number; y: number; z: number } }> = {};
-
-      pendingChanges.forEach(change => {
-        // Calculate translation delta (difference between new and original positions)
-        const deltaX = change.newPosition.x - change.originalPosition.x;
-        const deltaY = change.newPosition.y - change.originalPosition.y;
-        const deltaZ = change.newPosition.z - change.originalPosition.z;
-        
-        // Use uniqueId as key, translation delta as value (in feet)
-        transformsObject[change.uniqueId] = {
-          translation: {
-            x: deltaX,
-            y: deltaY,
-            z: deltaZ
-          }
-        };
-      });
-
       // Check if SSA re-upload has been done
       if (!ossCoordinates) {
         toast.error('Please click "SSA Re-upload" button first to upload the file to OSS storage. This is required to avoid memory limits.');
         return;
       }
 
-      // Prepare request payload with Autodesk token and OSS coordinates
-      const requestPayload = {
-        token: accessToken, // Autodesk access token for ACC API calls
-        itemId: currentItemId,
-        projectId: currentProjectId,
-        folderUrn: currentFolderUrn,
-        transforms: transformsObject,
-        ossBucket: ossCoordinates.bucket,  // From SSA re-upload
-        ossObject: ossCoordinates.object    // From SSA re-upload
+      // Transform pendingChanges array into object format
+      const transformsObject: Record<string, { translation: { x: number; y: number; z: number } }> = {};
+
+      pendingChanges.forEach(change => {
+        const deltaX = change.newPosition.x - change.originalPosition.x;
+        const deltaY = change.newPosition.y - change.originalPosition.y;
+        const deltaZ = change.newPosition.z - change.originalPosition.z;
+        
+        transformsObject[change.uniqueId] = {
+          translation: { x: deltaX, y: deltaY, z: deltaZ }
+        };
+      });
+
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const baseUrl = 'https://mbkfbmsjwlgqyzhfjwka.supabase.co/functions/v1';
+      
+      if (!supabaseAnonKey || !accessToken) {
+        throw new Error('Missing authentication credentials');
+      }
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'apikey': supabaseAnonKey,
       };
 
-      // Log the full request payload for debugging
-      console.log('Sending to revit-modify:', JSON.stringify({
-        hasToken: !!accessToken,
-        itemId: requestPayload.itemId,
-        projectId: requestPayload.projectId,
-        folderUrn: requestPayload.folderUrn,
-        transformCount: Object.keys(transformsObject).length,
-        hasOssCoordinates: !!(requestPayload.ossBucket && requestPayload.ossObject),
-        ossBucket: requestPayload.ossBucket,
-        ossObject: requestPayload.ossObject,
-        transforms: transformsObject
-      }, null, 2));
+      // STEP 1: Start the job
+      toast('Starting Design Automation job...');
+      
+      const startResponse = await fetch(`${baseUrl}/revit-modify`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          token: accessToken,
+          itemId: currentItemId,
+          projectId: currentProjectId,
+          folderUrn: currentFolderUrn,
+          transforms: transformsObject,
+          ossBucket: ossCoordinates.bucket,
+          ossObject: ossCoordinates.object
+        }),
+      });
 
-      // Call Cursor's revit-modify endpoint with correct format
-      try {
-        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-        const endpointUrl = 'https://mbkfbmsjwlgqyzhfjwka.supabase.co/functions/v1/revit-modify';
-        
-        // Debug: Verify keys are loaded
-        console.log('VITE_SUPABASE_PUBLISHABLE_KEY available:', !!supabaseAnonKey);
-        console.log('Autodesk access token available:', !!accessToken);
-        console.log('Endpoint URL:', endpointUrl);
-        
-        if (!supabaseAnonKey) {
-          throw new Error('VITE_SUPABASE_PUBLISHABLE_KEY is not available in environment');
-        }
-        
-        if (!accessToken) {
-          throw new Error('Autodesk access token is not available');
-        }
-        
-        const headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`, // For edge function auth
-          'apikey': supabaseAnonKey,
-        };
-        
-        console.log('Request headers:', JSON.stringify({
-          'Content-Type': headers['Content-Type'],
-          'Authorization': `Bearer ${supabaseAnonKey.substring(0, 20)}...`,
-          'apikey': `${supabaseAnonKey.substring(0, 20)}...`,
-        }, null, 2));
-        
-        const response = await fetch(endpointUrl, {
+      if (!startResponse.ok) {
+        const error = await startResponse.json();
+        throw new Error(error.error || error.message || 'Failed to start job');
+      }
+
+      const startResult = await startResponse.json();
+      const { workItemId, bucketKeyTemp, outputObjectKey } = startResult;
+
+      console.log('WorkItem created:', workItemId);
+
+      // STEP 2: Poll for status
+      let attempts = 0;
+      const maxAttempts = 60; // 10 minutes max
+      const pollInterval = 10000; // 10 seconds
+
+      toast('Processing... (this may take 2-5 minutes)');
+
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        attempts++;
+
+        const statusResponse = await fetch(`${baseUrl}/revit-status`, {
           method: 'POST',
           headers,
-          body: JSON.stringify(requestPayload),
+          body: JSON.stringify({ workItemId }),
         });
 
-        const result = await response.json();
-
-        if (!response.ok) {
-          console.error('Edge function returned error response:', JSON.stringify(result, null, 2));
-          throw new Error(result.error || 'Unknown edge function error');
+        if (!statusResponse.ok) {
+          console.error('Status check failed:', statusResponse.status);
+          continue; // Retry
         }
 
-        console.log('Design Automation response:', result);
-        toast.success(`Changes saved! ${pendingChanges.length} elements modified`);
-      } catch (err) {
-        console.error('Fetch error:', err);
-        throw err;
+        const statusData = await statusResponse.json();
+        const status = statusData.status;
+
+        console.log(`Poll attempt ${attempts}: status = ${status}`);
+        toast(`Processing... (${attempts * 10}s elapsed, status: ${status})`);
+
+        if (status === 'success') {
+          // STEP 3: Complete the job
+          toast('WorkItem succeeded! Uploading to ACC...');
+
+          const completeResponse = await fetch(`${baseUrl}/revit-complete`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              token: accessToken,
+              projectId: currentProjectId,
+              itemId: currentItemId,
+              folderUrn: currentFolderUrn,
+              bucketKeyTemp,
+              outputObjectKey
+            }),
+          });
+
+          if (!completeResponse.ok) {
+            const error = await completeResponse.json();
+            throw new Error(error.error || 'Failed to complete job');
+          }
+
+          const result = await completeResponse.json();
+          toast.success(`Changes saved! New version: ${result.versionId}`);
+          
+          // Clear pending changes
+          setPendingChanges([]);
+          return;
+        }
+
+        if (status.startsWith('failed')) {
+          const errorMessage = statusData.reportContent 
+            ? `WorkItem failed: ${statusData.reportContent.slice(-500)}`
+            : `WorkItem failed with status: ${status}`;
+          throw new Error(errorMessage);
+        }
+
+        // Status is 'pending' or 'inprogress', continue polling
       }
-      
-      // Clear pending changes
-      setPendingChanges([]);
-      
-      // Note: In production, you would reload the model here with the new version
-      // await loadModel(manualProjectId);
-      
+
+      throw new Error('Job timed out after 10 minutes');
+
     } catch (error) {
       console.error('Save error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to save changes');

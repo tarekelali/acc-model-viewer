@@ -18,6 +18,12 @@ verify_jwt = false
 [functions.revit-modify]
 verify_jwt = false
 
+[functions.revit-status]
+verify_jwt = false
+
+[functions.revit-complete]
+verify_jwt = false
+
 [functions.autodesk-reupload-ssa]
 verify_jwt = false
 
