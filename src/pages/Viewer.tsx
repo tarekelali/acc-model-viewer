@@ -811,12 +811,22 @@ const Viewer = () => {
       const transformsObject: Record<string, { translation: { x: number; y: number; z: number } }> = {};
 
       pendingChanges.forEach(change => {
+        // Calculate translation delta (difference between new and original positions)
         const deltaX = change.newPosition.x - change.originalPosition.x;
         const deltaY = change.newPosition.y - change.originalPosition.y;
         const deltaZ = change.newPosition.z - change.originalPosition.z;
-        
-        transformsObject[change.uniqueId] = {
-          translation: { x: deltaX, y: deltaY, z: deltaZ }
+
+        // Create composite key: uniqueId-dbIdInHex (matches C# plugin's expected format)
+        // The C# plugin splits by '-' and extracts the last segment as the dbId
+        const dbIdHex = change.dbId.toString(16);
+        const compositeKey = `${change.uniqueId}-${dbIdHex}`;
+
+        transformsObject[compositeKey] = {
+          translation: {
+            x: deltaX,
+            y: deltaY,
+            z: deltaZ
+          }
         };
       });
 
