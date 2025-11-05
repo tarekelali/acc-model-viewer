@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload, Download, Trash2, Filter, Search, ArrowDown } from "lucide-react";
+import { FolderTree, ZoomIn, ZoomOut, RotateCcw, Layers, LogIn, Edit3, Save, X, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -70,12 +70,6 @@ const Viewer = () => {
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [isReuploading, setIsReuploading] = useState(false);
   const [ossCoordinates, setOssCoordinates] = useState<{ bucket: string; object: string } | null>(null);
-  const [debugLogs, setDebugLogs] = useState<Array<{ timestamp: string; type: string; message: string }>>([]);
-  const [logFilter, setLogFilter] = useState<'all' | 'log' | 'error' | 'warn'>('all');
-  const [showLogPanel, setShowLogPanel] = useState(false);
-  const [logSearchText, setLogSearchText] = useState('');
-  const [autoScroll, setAutoScroll] = useState(true);
-  const logListRef = useRef<HTMLDivElement>(null);
   
   // Helper to extract project ID from URL or return as-is
   const extractProjectId = (input: string): string => {
@@ -87,46 +81,6 @@ const Viewer = () => {
     // Otherwise return as-is (already a project ID)
     return input.trim();
   };
-
-  // Intercept console logs for debug download
-  useEffect(() => {
-    const originalLog = console.log;
-    const originalError = console.error;
-    const originalWarn = console.warn;
-
-    console.log = (...args: any[]) => {
-      setDebugLogs(prev => [...prev, {
-        timestamp: new Date().toISOString(),
-        type: 'log',
-        message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ')
-      }]);
-      originalLog(...args);
-    };
-
-    console.error = (...args: any[]) => {
-      setDebugLogs(prev => [...prev, {
-        timestamp: new Date().toISOString(),
-        type: 'error',
-        message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ')
-      }]);
-      originalError(...args);
-    };
-
-    console.warn = (...args: any[]) => {
-      setDebugLogs(prev => [...prev, {
-        timestamp: new Date().toISOString(),
-        type: 'warn',
-        message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ')
-      }]);
-      originalWarn(...args);
-    };
-
-    return () => {
-      console.log = originalLog;
-      console.error = originalError;
-      console.warn = originalWarn;
-    };
-  }, []);
 
   // Check for auth callback or load stored tokens
   useEffect(() => {
@@ -831,61 +785,6 @@ const Viewer = () => {
     setShowSaveDialog(true);
   };
 
-  const getFilteredLogsCount = (filterType: 'all' | 'log' | 'error' | 'warn') => {
-    if (filterType === 'all') return debugLogs.length;
-    return debugLogs.filter(log => log.type === filterType).length;
-  };
-
-  const getFilteredAndSearchedLogs = () => {
-    let filtered = logFilter === 'all'
-      ? debugLogs
-      : debugLogs.filter(log => log.type === logFilter);
-
-    if (logSearchText.trim()) {
-      const searchLower = logSearchText.toLowerCase();
-      filtered = filtered.filter(log =>
-        log.message.toLowerCase().includes(searchLower) ||
-        log.type.toLowerCase().includes(searchLower)
-      );
-    }
-
-    return filtered;
-  };
-
-  // Auto-scroll effect
-  useEffect(() => {
-    if (autoScroll && logListRef.current) {
-      logListRef.current.scrollTop = logListRef.current.scrollHeight;
-    }
-  }, [debugLogs, autoScroll]);
-
-  const downloadDebugLogs = () => {
-    const filteredLogs = logFilter === 'all' 
-      ? debugLogs 
-      : debugLogs.filter(log => log.type === logFilter);
-    
-    const logContent = filteredLogs.map(log => 
-      `[${log.timestamp}] [${log.type.toUpperCase()}] ${log.message}`
-    ).join('\n\n');
-    
-    const blob = new Blob([logContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `debug-logs-${logFilter}-${new Date().toISOString()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    toast.success(`Downloaded ${filteredLogs.length} ${logFilter === 'all' ? '' : logFilter + ' '}logs`);
-  };
-
-  const clearDebugLogs = () => {
-    setDebugLogs([]);
-    toast.success('Debug logs cleared');
-  };
-
   const confirmSave = async () => {
     setIsSaving(true);
     setShowSaveDialog(false);
@@ -1454,16 +1353,6 @@ const Viewer = () => {
             >
               <Layers className="h-5 w-5" />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowLogPanel(!showLogPanel)}
-              className="hover:bg-secondary gap-2"
-              title="Toggle Debug Log Panel"
-            >
-              <Filter className="h-4 w-4" />
-              <span className="text-xs">Logs ({debugLogs.length})</span>
-            </Button>
           </div>
         </div>
 
@@ -1525,156 +1414,6 @@ const Viewer = () => {
           </div>
         )}
 
-        {/* Debug Log Panel */}
-        {showLogPanel && (
-          <div className="absolute top-4 right-4 bg-card border border-border rounded-lg shadow-lg w-96 max-h-[600px] flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b border-border">
-              <h3 className="font-semibold text-foreground">
-                Debug Logs ({getFilteredAndSearchedLogs().length}/{debugLogs.length})
-              </h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowLogPanel(false)}
-                className="h-6 w-6"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Filter Buttons */}
-            <div className="flex gap-2 p-3 border-b border-border">
-              <Button
-                variant={logFilter === 'all' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setLogFilter('all')}
-                className="flex-1"
-              >
-                All ({debugLogs.length})
-              </Button>
-              <Button
-                variant={logFilter === 'log' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setLogFilter('log')}
-                className="flex-1"
-              >
-                Log ({getFilteredLogsCount('log')})
-              </Button>
-              <Button
-                variant={logFilter === 'error' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setLogFilter('error')}
-                className="flex-1"
-              >
-                Error ({getFilteredLogsCount('error')})
-              </Button>
-              <Button
-                variant={logFilter === 'warn' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setLogFilter('warn')}
-                className="flex-1"
-              >
-                Warn ({getFilteredLogsCount('warn')})
-              </Button>
-            </div>
-
-            {/* Search Input */}
-            <div className="p-3 border-b border-border">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={logSearchText}
-                  onChange={(e) => setLogSearchText(e.target.value)}
-                  placeholder="Search logs..."
-                  className="w-full h-8 pl-9 pr-8 text-xs rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-                {logSearchText && (
-                  <button
-                    onClick={() => setLogSearchText('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-2 p-3 border-b border-border">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={downloadDebugLogs}
-                className="flex-1 gap-2"
-              >
-                <Download className="h-4 w-4" />
-                Download
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearDebugLogs}
-                className="flex-1 gap-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                Clear
-              </Button>
-              <Button
-                variant={autoScroll ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setAutoScroll(!autoScroll)}
-                className="gap-2"
-                title={autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
-              >
-                <ArrowDown className="h-3 w-3" />
-              </Button>
-            </div>
-
-            {/* Log List */}
-            <div ref={logListRef} className="flex-1 overflow-y-auto p-3 space-y-2">
-              {debugLogs.length === 0 ? (
-                <div className="text-center text-muted-foreground text-sm py-8">
-                  No logs captured yet
-                </div>
-              ) : getFilteredAndSearchedLogs().length === 0 ? (
-                <div className="text-center text-muted-foreground text-sm py-8">
-                  No logs match your search
-                </div>
-              ) : (
-                [...getFilteredAndSearchedLogs()].reverse().map((log, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`p-2 rounded border text-xs ${
-                      log.type === 'error' 
-                        ? 'border-red-500/50 bg-red-500/10' 
-                        : log.type === 'warn' 
-                          ? 'border-yellow-500/50 bg-yellow-500/10'
-                          : 'border-border bg-muted/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`font-semibold uppercase ${
-                        log.type === 'error' ? 'text-red-500' 
-                        : log.type === 'warn' ? 'text-yellow-500'
-                        : 'text-foreground'
-                      }`}>
-                        {log.type}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {new Date(log.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-                      {log.message}
-                    </pre>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Save Confirmation Dialog */}
