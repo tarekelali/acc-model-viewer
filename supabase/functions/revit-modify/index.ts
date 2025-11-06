@@ -951,7 +951,7 @@ serve(async (req) => {
     const workItemPayload = {
       activityId: activityAlias,
       arguments: {
-        rvtFile: {
+        inputFile: {
           url: downloadUrl,
           verb: 'get'
         },
@@ -960,7 +960,7 @@ serve(async (req) => {
           verb: 'get',
           localName: 'transforms.json'
         },
-        result: {
+        outputFile: {
           url: outputSignedUrl,
           verb: 'put',
           localName: 'output.rvt',
