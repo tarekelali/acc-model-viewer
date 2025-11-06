@@ -661,8 +661,9 @@ serve(async (req) => {
     // ========== STEP 4: VERIFY DESIGN AUTOMATION CONFIGURATION ==========
     console.log('[STEP 4] Verifying Design Automation configuration...');
     
-    const appBundleAlias = Deno.env.get('DA_APPBUNDLE_ALIAS') || `${clientId}.RevitTransformApp+prod`;
-    const activityAlias = Deno.env.get('DA_ACTIVITY_ALIAS') || `${clientId}.RevitTransformActivity+prod`;
+    // CRITICAL: Use the actual deployed Activity/AppBundle IDs from Cursor deployment
+    const appBundleAlias = `${clientId}.RevitTransformAppV2+1`;
+    const activityAlias = `${clientId}.RevitTransformActivityV2+1`;
     
     console.log('[STEP 4] Configuration:', {
       appBundleAlias,
