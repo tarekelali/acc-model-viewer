@@ -768,21 +768,37 @@ serve(async (req) => {
     // ========== STEP 5.5: UPLOAD TRANSFORMS.JSON TO OSS ==========
     console.log('[STEP 5.5] Uploading transforms.json to OSS...');
     
+    // Helper function to extract Revit Element ID from UniqueId
+    // UniqueId format: "562f4fcd-297a-4420-acfc-2a688eda6533-0008eaa6"
+    // Last segment (0008eaa6) is hex Revit Element ID → convert to decimal (584358)
+    function extractRevitElementId(uniqueId: string): number {
+      const parts = uniqueId.split('-');
+      const hexId = parts[parts.length - 1]; // Last segment is the hex element ID
+      return parseInt(hexId, 16); // Convert hex to decimal
+    }
+    
     // Convert transforms object to array format expected by C# plugin with camelCase
-    const transformsArray = Object.entries(transforms).map(([uniqueId, transformData]: [string, any]) => ({
-      dbId: transformData.dbId,
-      elementName: transformData.elementName,
-      originalPosition: {
-        x: transformData.originalPosition.x,
-        y: transformData.originalPosition.y,
-        z: transformData.originalPosition.z
-      },
-      newPosition: {
-        x: transformData.newPosition.x,
-        y: transformData.newPosition.y,
-        z: transformData.newPosition.z
-      }
-    }));
+    const transformsArray = Object.entries(transforms).map(([uniqueId, transformData]: [string, any]) => {
+      const revitElementId = extractRevitElementId(uniqueId);
+      
+      console.log(`[TRANSFORM] ${transformData.elementName}: uniqueId=${uniqueId} → elementId=${revitElementId}`);
+      
+      return {
+        elementId: revitElementId,          // ✅ Use actual Revit Element ID (not Viewer dbId)
+        uniqueId: uniqueId,                 // ✅ Also send uniqueId for reference
+        elementName: transformData.elementName,
+        originalPosition: {
+          x: transformData.originalPosition.x,
+          y: transformData.originalPosition.y,
+          z: transformData.originalPosition.z
+        },
+        newPosition: {
+          x: transformData.newPosition.x,
+          y: transformData.newPosition.y,
+          z: transformData.newPosition.z
+        }
+      };
+    });
     
     const transformsJson = JSON.stringify({ transforms: transformsArray });
     console.log(`[STEP 5.5] Converted ${transformsArray.length} transform(s) to C# format`);

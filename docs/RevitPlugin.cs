@@ -107,19 +107,23 @@ namespace RevitTransformPlugin
                     {
                         try
                         {
-                            // Try to get element by dbId (viewer ID)
-                            // Note: dbId in Forge Viewer may not match Element.Id in Revit
-                            // You may need to use UniqueId or custom parameter mapping
+                            // Use the actual Revit Element ID extracted from UniqueId
+                            // UniqueId format: "562f4fcd-297a-4420-acfc-2a688eda6533-0008eaa6"
+                            // Last segment (0008eaa6 hex) → 584358 decimal = Revit Element ID
                             
-                            ElementId elemId = new ElementId(transform.DbId);
+                            Console.WriteLine($"Looking for element: ID={transform.ElementId}, UniqueId={transform.UniqueId}, Name={transform.ElementName}");
+                            
+                            ElementId elemId = new ElementId(transform.ElementId);  // ✅ Use actual Revit Element ID
                             Element element = doc.GetElement(elemId);
 
                             if (element == null)
                             {
-                                Console.WriteLine($"Element not found: dbId={transform.DbId}, name={transform.ElementName}");
+                                Console.WriteLine($"❌ Element not found: elementId={transform.ElementId}, uniqueId={transform.UniqueId}, name={transform.ElementName}");
                                 failCount++;
                                 continue;
                             }
+                            
+                            Console.WriteLine($"✅ Found element: {element.Name} (Category: {element.Category?.Name})");
 
                             if (element.Location is LocationPoint locationPoint)
                             {
@@ -193,8 +197,11 @@ namespace RevitTransformPlugin
 
     public class ElementTransform
     {
-        [JsonProperty("dbId")]
-        public int DbId { get; set; }
+        [JsonProperty("elementId")]        // ✅ Changed from "dbId" - this is the actual Revit Element ID
+        public int ElementId { get; set; }
+        
+        [JsonProperty("uniqueId")]         // ✅ Added for reference and debugging
+        public string UniqueId { get; set; }
 
         [JsonProperty("elementName")]
         public string ElementName { get; set; }
