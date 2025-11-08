@@ -807,8 +807,13 @@ const Viewer = () => {
         return;
       }
 
-      // Transform pendingChanges array into Cursor's expected object format
-      const transformsObject: Record<string, { translation: { x: number; y: number; z: number } }> = {};
+      // Transform pendingChanges array into object format with full position data
+      const transformsObject: Record<string, { 
+        dbId: number;
+        elementName: string;
+        originalPosition: { x: number; y: number; z: number };
+        newPosition: { x: number; y: number; z: number };
+      }> = {};
       const validationErrors: string[] = [];
 
       console.log('=== Transform Creation Debug ===');
@@ -872,10 +877,17 @@ const Viewer = () => {
         }
 
         transformsObject[compositeKey] = {
-          translation: {
-            x: deltaX,
-            y: deltaY,
-            z: deltaZ
+          dbId: change.dbId,
+          elementName: change.elementName,
+          originalPosition: {
+            x: change.originalPosition.x,
+            y: change.originalPosition.y,
+            z: change.originalPosition.z
+          },
+          newPosition: {
+            x: change.newPosition.x,
+            y: change.newPosition.y,
+            z: change.newPosition.z
           }
         };
 
@@ -950,7 +962,8 @@ const Viewer = () => {
         console.log(`   - GUID part: "${guidPart}"`);
         console.log(`   - Revit Element ID (hex): ${revitIdHex}`);
         console.log(`   - Revit Element ID (decimal): ${revitIdDecimal}`);
-        console.log(`   - Translation:`, transformsObject[key].translation);
+        console.log(`   - Original Position:`, transformsObject[key].originalPosition);
+        console.log(`   - New Position:`, transformsObject[key].newPosition);
       });
 
       console.log('\n=== Full Request Payload ===');

@@ -313,14 +313,15 @@ serve(async (req) => {
       );
     }
 
-    // Validate transform structure (each element should have translation)
+    // Validate transform structure (each element should have positions)
     for (const elementId of transformKeys) {
       const t = transforms[elementId];
-      if (!t.translation || typeof t.translation.x !== 'number' || 
-          typeof t.translation.y !== 'number' || typeof t.translation.z !== 'number') {
+      if (!t.originalPosition || !t.newPosition ||
+          typeof t.originalPosition.x !== 'number' || typeof t.originalPosition.y !== 'number' || typeof t.originalPosition.z !== 'number' ||
+          typeof t.newPosition.x !== 'number' || typeof t.newPosition.y !== 'number' || typeof t.newPosition.z !== 'number') {
         return createErrorResponse(
           ErrorType.VALIDATION_ERROR,
-          `Invalid transform structure for element ${elementId}`,
+          `Invalid transform structure for element ${elementId}. Must include originalPosition and newPosition with x,y,z coordinates.`,
           'Input Validation',
           400,
           { elementId, transform: t }
@@ -767,7 +768,25 @@ serve(async (req) => {
     // ========== STEP 5.5: UPLOAD TRANSFORMS.JSON TO OSS ==========
     console.log('[STEP 5.5] Uploading transforms.json to OSS...');
     
-    const transformsJson = JSON.stringify({ transforms });
+    // Convert transforms object to array format expected by C# plugin
+    const transformsArray = Object.entries(transforms).map(([uniqueId, transformData]: [string, any]) => ({
+      DbId: transformData.dbId,
+      UniqueId: uniqueId,
+      ElementName: transformData.elementName,
+      OriginalPosition: {
+        X: transformData.originalPosition.x,
+        Y: transformData.originalPosition.y,
+        Z: transformData.originalPosition.z
+      },
+      NewPosition: {
+        X: transformData.newPosition.x,
+        Y: transformData.newPosition.y,
+        Z: transformData.newPosition.z
+      }
+    }));
+    
+    const transformsJson = JSON.stringify({ Transforms: transformsArray });
+    console.log(`[STEP 5.5] Converted ${transformsArray.length} transform(s) to C# format`);
     const transformsKey = `transforms_${Date.now()}.json`;
 
     // Use batch signed S3 upload API
