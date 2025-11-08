@@ -37,7 +37,7 @@ You need to **compile and register the Revit Plugin** with Design Automation. Th
 
 2. **Install NuGet packages:**
    ```powershell
-   Install-Package DesignAutomationBridge
+   Install-Package Autodesk.Forge.DesignAutomation.Revit -Version 2024.0.0
    Install-Package Newtonsoft.Json
    ```
 

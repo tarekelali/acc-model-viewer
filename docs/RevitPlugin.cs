@@ -4,7 +4,7 @@
 // SETUP INSTRUCTIONS:
 // 1. Create a new Class Library project in Visual Studio (.NET Framework 4.8)
 // 2. Install NuGet packages:
-//    - DesignAutomationBridge
+//    - Autodesk.Forge.DesignAutomation.Revit -Version 2024.0.0
 //    - Newtonsoft.Json
 // 3. Add Revit API references (RevitAPI.dll, RevitAPIUI.dll)
 // 4. Build the project
@@ -41,7 +41,7 @@ using System.Collections.Generic;
 using System.IO;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB;
-using DesignAutomationFramework;
+using Autodesk.Forge.DesignAutomation.Revit;
 using Newtonsoft.Json;
 
 namespace RevitTransformPlugin
