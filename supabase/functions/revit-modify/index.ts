@@ -768,24 +768,23 @@ serve(async (req) => {
     // ========== STEP 5.5: UPLOAD TRANSFORMS.JSON TO OSS ==========
     console.log('[STEP 5.5] Uploading transforms.json to OSS...');
     
-    // Convert transforms object to array format expected by C# plugin
+    // Convert transforms object to array format expected by C# plugin with camelCase
     const transformsArray = Object.entries(transforms).map(([uniqueId, transformData]: [string, any]) => ({
-      DbId: transformData.dbId,
-      UniqueId: uniqueId,
-      ElementName: transformData.elementName,
-      OriginalPosition: {
-        X: transformData.originalPosition.x,
-        Y: transformData.originalPosition.y,
-        Z: transformData.originalPosition.z
+      dbId: transformData.dbId,
+      elementName: transformData.elementName,
+      originalPosition: {
+        x: transformData.originalPosition.x,
+        y: transformData.originalPosition.y,
+        z: transformData.originalPosition.z
       },
-      NewPosition: {
-        X: transformData.newPosition.x,
-        Y: transformData.newPosition.y,
-        Z: transformData.newPosition.z
+      newPosition: {
+        x: transformData.newPosition.x,
+        y: transformData.newPosition.y,
+        z: transformData.newPosition.z
       }
     }));
     
-    const transformsJson = JSON.stringify({ Transforms: transformsArray });
+    const transformsJson = JSON.stringify({ transforms: transformsArray });
     console.log(`[STEP 5.5] Converted ${transformsArray.length} transform(s) to C# format`);
     const transformsKey = `transforms_${Date.now()}.json`;
 
