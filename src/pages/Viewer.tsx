@@ -822,9 +822,17 @@ const Viewer = () => {
 
       pendingChanges.forEach((change, index) => {
         console.log(`\n--- Change ${index + 1}/${pendingChanges.length} ---`);
-        console.log('Element:', change.elementName);
+        console.log('Element:', change.elementName, `[${change.dbId}]`);
         console.log('dbId:', change.dbId);
         console.log('uniqueId:', change.uniqueId);
+        console.log('Has originalPosition:', !!change.originalPosition);
+        console.log('Has newPosition:', !!change.newPosition);
+        if (change.originalPosition) {
+          console.log('Original position:', change.originalPosition);
+        }
+        if (change.newPosition) {
+          console.log('New position:', change.newPosition);
+        }
 
         // Validate uniqueId
         if (!change.uniqueId || change.uniqueId.trim() === '') {
@@ -839,6 +847,45 @@ const Viewer = () => {
           const error = `Element ${change.elementName}: Invalid dbId (${change.dbId})`;
           validationErrors.push(error);
           console.error('❌ VALIDATION ERROR:', error);
+          return;
+        }
+
+        // Validate originalPosition exists
+        if (!change.originalPosition || typeof change.originalPosition !== 'object') {
+          const error = `Element ${change.elementName} (dbId: ${change.dbId}): Missing or invalid originalPosition`;
+          validationErrors.push(error);
+          console.error('❌ VALIDATION ERROR:', error);
+          console.error('Change data:', change);
+          return;
+        }
+
+        // Validate newPosition exists
+        if (!change.newPosition || typeof change.newPosition !== 'object') {
+          const error = `Element ${change.elementName} (dbId: ${change.dbId}): Missing or invalid newPosition`;
+          validationErrors.push(error);
+          console.error('❌ VALIDATION ERROR:', error);
+          console.error('Change data:', change);
+          return;
+        }
+
+        // Validate position properties exist
+        if (!Number.isFinite(change.originalPosition.x) || 
+            !Number.isFinite(change.originalPosition.y) || 
+            !Number.isFinite(change.originalPosition.z)) {
+          const error = `Element ${change.elementName}: Invalid originalPosition coordinates`;
+          validationErrors.push(error);
+          console.error('❌ VALIDATION ERROR:', error);
+          console.error('originalPosition:', change.originalPosition);
+          return;
+        }
+
+        if (!Number.isFinite(change.newPosition.x) || 
+            !Number.isFinite(change.newPosition.y) || 
+            !Number.isFinite(change.newPosition.z)) {
+          const error = `Element ${change.elementName}: Invalid newPosition coordinates`;
+          validationErrors.push(error);
+          console.error('❌ VALIDATION ERROR:', error);
+          console.error('newPosition:', change.newPosition);
           return;
         }
 
