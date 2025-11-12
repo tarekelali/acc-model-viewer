@@ -59,6 +59,7 @@ const Viewer = () => {
     uniqueId: string;  // Revit UniqueId (GUID)
     originalPosition: { x: number; y: number; z: number };
     newPosition: { x: number; y: number; z: number };
+    translation: { x: number; y: number; z: number };
     elementName: string;
   }>>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -694,11 +695,20 @@ const Viewer = () => {
               // Add to pending changes with UniqueId
               setPendingChanges((prev: any) => {
                 const existing = prev.findIndex((c: any) => c.dbId === dbId);
+                
+                // Calculate translation delta
+                const translation = {
+                  x: newPos.x - this.originalPosition.x,
+                  y: newPos.y - this.originalPosition.y,
+                  z: newPos.z - this.originalPosition.z
+                };
+                
                 const change = {
                   dbId,
                   uniqueId: uniqueId || `fallback-${dbId}`,
                   originalPosition: this.originalPosition,
                   newPosition: newPos,
+                  translation,
                   elementName
                 };
                 
@@ -813,6 +823,7 @@ const Viewer = () => {
         elementName: string;
         originalPosition: { x: number; y: number; z: number };
         newPosition: { x: number; y: number; z: number };
+        translation: { x: number; y: number; z: number };
       }> = {};
       const validationErrors: string[] = [];
 
@@ -935,6 +946,11 @@ const Viewer = () => {
             x: change.newPosition.x,
             y: change.newPosition.y,
             z: change.newPosition.z
+          },
+          translation: {
+            x: deltaX,
+            y: deltaY,
+            z: deltaZ
           }
         };
 
