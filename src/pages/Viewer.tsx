@@ -36,6 +36,9 @@ interface Project {
   };
 }
 
+// Build version tracking
+const BUILD_VERSION = "v2.0.0-translation-fix";
+
 const Viewer = () => {
   // SECURITY: Whitelist - only allow this project
   const ALLOWED_PROJECT_ID = "d27a6383-5881-4756-9cff-3deccd318427";
@@ -82,6 +85,11 @@ const Viewer = () => {
     // Otherwise return as-is (already a project ID)
     return input.trim();
   };
+
+  // Log build version on mount
+  useEffect(() => {
+    console.log(`🚀 Viewer App Build: ${BUILD_VERSION}`);
+  }, []);
 
   // Check for auth callback or load stored tokens
   useEffect(() => {
@@ -1249,7 +1257,10 @@ const Viewer = () => {
         } overflow-hidden border-r border-border bg-card`}
       >
         <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">ACC Projects</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-foreground">ACC Projects</h2>
+            <span className="text-xs text-muted-foreground font-mono">{BUILD_VERSION}</span>
+          </div>
         </div>
         <div className="p-4 space-y-4">
           {/* Manual Project ID Input */}
