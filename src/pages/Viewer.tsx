@@ -1057,6 +1057,17 @@ const Viewer = () => {
         console.error('\n❌ Design Automation Start Failed');
         console.error('Response status:', startResponse.status);
         console.error('Response body:', startResult);
+        
+        console.error('\n=== FULL ERROR RESPONSE (JSON) ===');
+        console.error(JSON.stringify({
+          status: startResponse.status,
+          statusText: startResponse.statusText,
+          headers: Object.fromEntries(startResponse.headers.entries()),
+          body: startResult,
+          timestamp: new Date().toISOString(),
+          requestPayload: requestPayload
+        }, null, 2));
+        console.error('=== END FULL ERROR RESPONSE ===\n');
 
         // Log any error details from the response
         if (startResult.error) {
@@ -1143,6 +1154,20 @@ const Viewer = () => {
             console.error('\n❌ ACC Upload Failed');
             console.error('Response status:', completeResponse.status);
             console.error('Response body:', completeResult);
+            
+            console.error('\n=== FULL ERROR RESPONSE (JSON) ===');
+            console.error(JSON.stringify({
+              status: completeResponse.status,
+              statusText: completeResponse.statusText,
+              headers: Object.fromEntries(completeResponse.headers.entries()),
+              body: completeResult,
+              timestamp: new Date().toISOString(),
+              workItemId,
+              bucketKeyTemp,
+              outputObjectKey
+            }, null, 2));
+            console.error('=== END FULL ERROR RESPONSE ===\n');
+            
             throw new Error(completeResult.error || completeResult.message || 'Failed to upload to ACC');
           }
 
@@ -1159,6 +1184,16 @@ const Viewer = () => {
           console.error('\n❌ Design Automation Job Failed');
           console.error('Status:', status);
           console.error('Full status result:', statusData);
+          
+          console.error('\n=== FULL ERROR RESPONSE (JSON) ===');
+          console.error(JSON.stringify({
+            status,
+            statusData,
+            workItemId,
+            timestamp: new Date().toISOString(),
+            reportContent: statusData.reportContent
+          }, null, 2));
+          console.error('=== END FULL ERROR RESPONSE ===\n');
 
           if (statusData.reportContent) {
             console.error('\n📄 Report Content (last 1000 chars):');
@@ -1177,7 +1212,14 @@ const Viewer = () => {
       throw new Error('Job timed out after 10 minutes');
 
     } catch (error) {
-      console.error('Save error:', error);
+      console.error('\n=== SAVE ERROR (FULL DETAILS) ===');
+      console.error('Error object:', error);
+      console.error('Error type:', error?.constructor?.name);
+      console.error('Error message:', error instanceof Error ? error.message : String(error));
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('Timestamp:', new Date().toISOString());
+      console.error('=== END SAVE ERROR ===\n');
+      
       toast.error(error instanceof Error ? error.message : 'Failed to save changes');
     } finally {
       setIsSaving(false);
