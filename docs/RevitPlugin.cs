@@ -53,6 +53,14 @@ namespace RevitTransformPlugin
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
     public class TransformApp : IExternalDBApplication
     {
+        // Static constructor - runs when type is first loaded
+        static TransformApp()
+        {
+            Console.WriteLine("=== STATIC CONSTRUCTOR CALLED ===");
+            Console.WriteLine("[Static] RevitTransformPlugin.dll loaded successfully");
+            Console.WriteLine($"[Static] Assembly location: {typeof(TransformApp).Assembly.Location}");
+        }
+
         public ExternalDBApplicationResult OnStartup(ControlledApplication app)
         {
             Console.WriteLine("=== PLUGIN ONSTARTUP STARTED ===");
