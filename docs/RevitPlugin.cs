@@ -4,12 +4,15 @@
 // SETUP INSTRUCTIONS:
 // 1. Create a new Class Library project in Visual Studio (.NET Framework 4.8)
 // 2. Install NuGet packages:
-//    - Autodesk.Forge.DesignAutomation.Revit -Version 2024.0.0
+//    - Autodesk.Forge.DesignAutomation.Revit -Version 2025.0.0
 //    - Newtonsoft.Json
-// 3. Add Revit API references (RevitAPI.dll, RevitAPIUI.dll)
+// 3. Add Revit API references from Revit 2025 installation (RevitAPI.dll, RevitAPIUI.dll)
 // 4. Build the project
 // 5. Create AppBundle ZIP containing the DLL and dependencies
 // 6. Upload to Design Automation via Postman or API
+//
+// IMPORTANT: Console.WriteLine is the official logging method for Design Automation.
+// All console output appears in the WorkItem report.
 //
 // DESIGN AUTOMATION SETUP:
 // See: https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/
@@ -18,7 +21,7 @@
 // POST https://developer.api.autodesk.com/da/us-east/v3/appbundles
 // {
 //   "id": "RevitTransformPlugin",
-//   "engine": "Autodesk.Revit+2024",
+//   "engine": "Autodesk.Revit+2025",
 //   "description": "Applies element transformations"
 // }
 //
@@ -27,7 +30,7 @@
 // {
 //   "id": "TransformActivity",
 //   "commandLine": ["$(engine.path)\\\\revitcoreconsole.exe /i $(args[inputRvt].path) /al $(appbundles[RevitTransformPlugin].path)"],
-//   "engine": "Autodesk.Revit+2024",
+//   "engine": "Autodesk.Revit+2025",
 //   "appbundles": ["RevitTransformPlugin+prod"],
 //   "parameters": {
 //     "inputRvt": { "verb": "get" },
@@ -63,23 +66,44 @@ namespace RevitTransformPlugin
 
         public void HandleDesignAutomation(object sender, DesignAutomationReadyEventArgs e)
         {
-            e.Succeeded = ProcessTransforms(e.DesignAutomationData);
+            Console.WriteLine("=== DESIGN AUTOMATION HANDLER STARTED ===");
+            try
+            {
+                e.Succeeded = ProcessTransforms(e.DesignAutomationData);
+                Console.WriteLine($"=== DESIGN AUTOMATION HANDLER COMPLETED, Succeeded={e.Succeeded} ===");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("=== FATAL EXCEPTION IN HANDLER ===");
+                Console.WriteLine($"Exception Type: {ex.GetType().Name}");
+                Console.WriteLine($"Message: {ex.Message}");
+                Console.WriteLine($"Stack Trace: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+                }
+                e.Succeeded = false;
+            }
         }
 
         private bool ProcessTransforms(DesignAutomationData data)
         {
+            Console.WriteLine("[ProcessTransforms] START");
+            
             if (data == null)
             {
-                Console.WriteLine("DesignAutomationData is null");
+                Console.WriteLine("[ProcessTransforms] ERROR: DesignAutomationData is null");
                 return false;
             }
+            Console.WriteLine("[ProcessTransforms] DesignAutomationData is NOT null");
 
             Document doc = data.RevitDoc;
             if (doc == null)
             {
-                Console.WriteLine("Document is null");
+                Console.WriteLine("[ProcessTransforms] ERROR: Document is null");
                 return false;
             }
+            Console.WriteLine("[ProcessTransforms] Document is NOT null");
 
             try
             {
@@ -88,28 +112,43 @@ namespace RevitTransformPlugin
                 string docDirectory = Path.GetDirectoryName(doc.PathName);
                 
                 // Debug logging to verify paths
-                Console.WriteLine($"Document path: {doc.PathName}");
-                Console.WriteLine($"Document directory: {docDirectory}");
-                Console.WriteLine($"Current working directory: {Directory.GetCurrentDirectory()}");
+                Console.WriteLine($"[ProcessTransforms] Document path: {doc.PathName}");
+                Console.WriteLine($"[ProcessTransforms] Document directory: {docDirectory}");
+                Console.WriteLine($"[ProcessTransforms] Current working directory: {Directory.GetCurrentDirectory()}");
                 
                 // Read transformation data from the same directory as the document
                 string transformsPath = Path.Combine(docDirectory, "transforms.json");
-                Console.WriteLine($"Looking for transforms.json at: {transformsPath}");
+                Console.WriteLine($"[ProcessTransforms] Looking for transforms.json at: {transformsPath}");
                 
                 if (!File.Exists(transformsPath))
                 {
-                    Console.WriteLine("transforms.json not found at: " + transformsPath);
+                    Console.WriteLine($"[ProcessTransforms] ERROR: transforms.json not found at: {transformsPath}");
+                    Console.WriteLine($"[ProcessTransforms] Files in directory:");
+                    foreach (var file in Directory.GetFiles(docDirectory))
+                    {
+                        Console.WriteLine($"  - {Path.GetFileName(file)}");
+                    }
+                    return false;
+                }
+                Console.WriteLine("[ProcessTransforms] transforms.json found");
+
+                string json = File.ReadAllText(transformsPath);
+                Console.WriteLine($"[ProcessTransforms] JSON content length: {json.Length} characters");
+                
+                var transformData = JsonConvert.DeserializeObject<TransformData>(json);
+                if (transformData == null || transformData.Transforms == null)
+                {
+                    Console.WriteLine("[ProcessTransforms] ERROR: Failed to deserialize transforms.json");
                     return false;
                 }
 
-                string json = File.ReadAllText(transformsPath);
-                var transformData = JsonConvert.DeserializeObject<TransformData>(json);
+                Console.WriteLine($"[ProcessTransforms] Processing {transformData.Transforms.Count} transformations...");
 
-                Console.WriteLine($"Processing {transformData.Transforms.Count} transformations...");
-
+                Console.WriteLine("[ProcessTransforms] Starting transaction...");
                 using (Transaction trans = new Transaction(doc, "Apply Element Transforms"))
                 {
                     trans.Start();
+                    Console.WriteLine("[ProcessTransforms] Transaction started");
 
                     int successCount = 0;
                     int failCount = 0;
@@ -178,23 +217,30 @@ namespace RevitTransformPlugin
                         }
                     }
 
+                    Console.WriteLine("[ProcessTransforms] Committing transaction...");
                     trans.Commit();
+                    Console.WriteLine("[ProcessTransforms] Transaction committed successfully");
 
-                    Console.WriteLine($"Transform complete: {successCount} succeeded, {failCount} failed");
+                    Console.WriteLine($"[ProcessTransforms] Transform complete: {successCount} succeeded, {failCount} failed");
                 }
 
                 // Save the modified document to the same directory
                 string outputPath = Path.Combine(docDirectory, "output.rvt");
-                Console.WriteLine($"Saving modified document to: {outputPath}");
+                Console.WriteLine($"[ProcessTransforms] Saving modified document to: {outputPath}");
                 doc.SaveAs(outputPath);
-                Console.WriteLine($"✅ Successfully saved modified document");
+                Console.WriteLine($"[ProcessTransforms] ✅ Successfully saved modified document");
 
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Fatal error: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Console.WriteLine($"[ProcessTransforms] FATAL ERROR: {ex.Message}");
+                Console.WriteLine($"[ProcessTransforms] Exception Type: {ex.GetType().Name}");
+                Console.WriteLine($"[ProcessTransforms] Stack trace: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"[ProcessTransforms] Inner Exception: {ex.InnerException.Message}");
+                }
                 return false;
             }
         }
