@@ -25,6 +25,7 @@ This directory contains automation scripts to simplify the AppBundle registratio
    ├── PackageContents.xml                   ← Must be at .bundle root
    └── Contents/
        ├── RevitTransformPlugin.dll
+       ├── RevitTransformPlugin.addin        ← Required .addin manifest
        ├── Newtonsoft.Json.dll
        └── DesignAutomationBridge.dll
    ```
@@ -41,6 +42,21 @@ This directory contains automation scripts to simplify the AppBundle registratio
    
    # Copy PackageContents.xml to .bundle root (NOT Contents)
    cp PackageContents.xml RevitTransformPlugin.bundle/
+   
+   # Create the .addin manifest file inside Contents/
+   cat > RevitTransformPlugin.bundle/Contents/RevitTransformPlugin.addin << 'EOF'
+   <?xml version="1.0" encoding="utf-8"?>
+   <RevitAddIns>
+     <AddIn Type="DBApplication">
+       <Name>RevitTransformApp</Name>
+       <Assembly>RevitTransformPlugin.dll</Assembly>
+       <AddInId>A1B2C3D4-E5F6-7890-ABCD-EF1234567890</AddInId>
+       <FullClassName>RevitTransformPlugin.TransformApp</FullClassName>
+       <VendorId>REVITTRANSFORM</VendorId>
+       <VendorDescription>Revit Transform Plugin</VendorDescription>
+     </AddIn>
+   </RevitAddIns>
+   EOF
    ```
 
 9. **Create the ZIP file:**
@@ -52,7 +68,7 @@ This directory contains automation scripts to simplify the AppBundle registratio
 
 10. Place `RevitTransformPlugin.zip` in the root of this project
 
-**PackageContents.xml:**
+**PackageContents.xml** (at `.bundle` root):
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <ApplicationPackage SchemaVersion="1.0" 
@@ -77,6 +93,21 @@ This directory contains automation scripts to simplify the AppBundle registratio
     </ComponentEntry>
   </Components>
 </ApplicationPackage>
+```
+
+**RevitTransformPlugin.addin** (inside `Contents/` folder - created automatically by script above):
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="DBApplication">
+    <Name>RevitTransformApp</Name>
+    <Assembly>RevitTransformPlugin.dll</Assembly>
+    <AddInId>A1B2C3D4-E5F6-7890-ABCD-EF1234567890</AddInId>
+    <FullClassName>RevitTransformPlugin.TransformApp</FullClassName>
+    <VendorId>REVITTRANSFORM</VendorId>
+    <VendorDescription>Revit Transform Plugin</VendorDescription>
+  </AddIn>
+</RevitAddIns>
 ```
 
 ### Step 2: Set Your Client Secret
