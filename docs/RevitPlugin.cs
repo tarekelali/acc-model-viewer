@@ -55,8 +55,28 @@ namespace RevitTransformPlugin
     {
         public ExternalDBApplicationResult OnStartup(ControlledApplication app)
         {
-            DesignAutomationBridge.DesignAutomationReadyEvent += HandleDesignAutomation;
-            return ExternalDBApplicationResult.Succeeded;
+            Console.WriteLine("=== PLUGIN ONSTARTUP STARTED ===");
+            Console.WriteLine($"[OnStartup] Plugin assembly version: {typeof(TransformApp).Assembly.GetName().Version}");
+            Console.WriteLine($"[OnStartup] Revit version: {app.VersionNumber}");
+            
+            try
+            {
+                Console.WriteLine("[OnStartup] Attempting to subscribe to DesignAutomationReadyEvent...");
+                DesignAutomationBridge.DesignAutomationReadyEvent += HandleDesignAutomation;
+                Console.WriteLine("[OnStartup] ✓ Event subscription successful");
+                return ExternalDBApplicationResult.Succeeded;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[OnStartup] FATAL ERROR: {ex.Message}");
+                Console.WriteLine($"[OnStartup] Exception Type: {ex.GetType().Name}");
+                Console.WriteLine($"[OnStartup] Stack Trace: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"[OnStartup] Inner Exception: {ex.InnerException.Message}");
+                }
+                return ExternalDBApplicationResult.Failed;
+            }
         }
 
         public ExternalDBApplicationResult OnShutdown(ControlledApplication app)
