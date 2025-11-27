@@ -83,8 +83,19 @@ namespace RevitTransformPlugin
 
             try
             {
-                // Read transformation data
-                string transformsPath = Path.Combine(Directory.GetCurrentDirectory(), "transforms.json");
+                // Get the directory where the Revit document is located
+                // Design Automation downloads all files to the same job directory
+                string docDirectory = Path.GetDirectoryName(doc.PathName);
+                
+                // Debug logging to verify paths
+                Console.WriteLine($"Document path: {doc.PathName}");
+                Console.WriteLine($"Document directory: {docDirectory}");
+                Console.WriteLine($"Current working directory: {Directory.GetCurrentDirectory()}");
+                
+                // Read transformation data from the same directory as the document
+                string transformsPath = Path.Combine(docDirectory, "transforms.json");
+                Console.WriteLine($"Looking for transforms.json at: {transformsPath}");
+                
                 if (!File.Exists(transformsPath))
                 {
                     Console.WriteLine("transforms.json not found at: " + transformsPath);
@@ -172,10 +183,11 @@ namespace RevitTransformPlugin
                     Console.WriteLine($"Transform complete: {successCount} succeeded, {failCount} failed");
                 }
 
-                // Save the modified document
-                string outputPath = Path.Combine(Directory.GetCurrentDirectory(), "output.rvt");
+                // Save the modified document to the same directory
+                string outputPath = Path.Combine(docDirectory, "output.rvt");
+                Console.WriteLine($"Saving modified document to: {outputPath}");
                 doc.SaveAs(outputPath);
-                Console.WriteLine($"Saved modified document to: {outputPath}");
+                Console.WriteLine($"✅ Successfully saved modified document");
 
                 return true;
             }
