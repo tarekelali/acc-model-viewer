@@ -88,6 +88,30 @@ async function getAccessToken() {
   return result.data.access_token;
 }
 
+// Create new AppBundle version
+async function createAppBundleVersion(token) {
+  console.log('⚠️  AppBundle already exists, creating new version...');
+  
+  const versionSpec = {
+    engine: ENGINE,
+    description: 'Revit plugin for transforming element positions'
+  };
+
+  const options = {
+    hostname: 'developer.api.autodesk.com',
+    path: `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/versions`,
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  };
+
+  const result = await makeRequest(options, versionSpec);
+  console.log('✅ New AppBundle version created');
+  return result.data;
+}
+
 // Create AppBundle
 async function createAppBundle(token) {
   console.log('\n📦 Creating AppBundle...');
@@ -114,8 +138,7 @@ async function createAppBundle(token) {
     return result.data;
   } catch (error) {
     if (error.message.includes('409')) {
-      console.log('⚠️  AppBundle already exists, continuing...');
-      return { id: APPBUNDLE_NAME };
+      return await createAppBundleVersion(token);
     }
     throw error;
   }
@@ -200,6 +223,50 @@ async function createOrUpdateAppBundleAlias(token, version) {
   }
 }
 
+// Create new Activity version
+async function createActivityVersion(token) {
+  console.log('⚠️  Activity already exists, creating new version...');
+  
+  const activitySpec = {
+    engine: ENGINE,
+    commandLine: [`$(engine.path)\\\\revitcoreconsole.exe /i "$(args[inputFile].path)" /al "$(appbundles[${APPBUNDLE_NAME}].path)"`],
+    appbundles: [`${CLIENT_ID}.${APPBUNDLE_NAME}+v1`],
+    parameters: {
+      inputFile: {
+        verb: 'get',
+        description: 'Input Revit file',
+        localName: 'input.rvt',
+        required: true
+      },
+      transforms: {
+        verb: 'get',
+        description: 'Transform data JSON',
+        localName: 'transforms.json',
+        required: true
+      },
+      outputFile: {
+        verb: 'put',
+        description: 'Output Revit file',
+        localName: 'output.rvt',
+        required: true
+      }
+    }
+  };
+
+  const options = {
+    hostname: 'developer.api.autodesk.com',
+    path: `/da/us-east/v3/activities/${ACTIVITY_NAME}/versions`,
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  };
+
+  await makeRequest(options, activitySpec);
+  console.log('✅ New Activity version created');
+}
+
 // Create Activity
 async function createActivity(token) {
   console.log('\n⚙️  Creating Activity...');
@@ -246,7 +313,7 @@ async function createActivity(token) {
     console.log('✅ Activity created');
   } catch (error) {
     if (error.message.includes('409')) {
-      console.log('⚠️  Activity already exists, continuing...');
+      await createActivityVersion(token);
     } else {
       throw error;
     }
