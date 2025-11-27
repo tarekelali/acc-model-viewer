@@ -79,13 +79,9 @@ You need to **compile and register the Revit Plugin** with Design Automation. Th
      <Components Description="Revit Transform Application">
        <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2025" SeriesMax="R2025" />
        <ComponentEntry AppName="RevitTransformApp" 
-                       ModuleName="./Contents/RevitTransformPlugin.dll" 
+                       ModuleName="./Contents/RevitTransformPlugin.addin" 
                        AppDescription="Transforms element positions" 
-                       LoadOnRevitStartup="False" 
-                       LoadOnCommandInvocation="True">
-         <Commands GroupName="Autodesk">
-           <Command Global="TransformApp" Local="TransformApp" />
-         </Commands>
+                       LoadOnRevitStartup="True">
        </ComponentEntry>
      </Components>
    </ApplicationPackage>
