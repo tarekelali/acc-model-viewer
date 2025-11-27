@@ -19,11 +19,38 @@ This directory contains automation scripts to simplify the AppBundle registratio
    - RevitAPIUI.dll
 6. Copy the code from `docs/RevitPlugin.cs` into your project
 7. Build the project (Release mode)
-8. Create a ZIP file named `RevitTransformPlugin.zip` containing:
-   - Your compiled DLL
-   - `Newtonsoft.Json.dll`
-   - `PackageContents.xml` (see below)
-9. Place the ZIP file in the root of this project
+8. **Create the AppBundle folder structure:**
+   ```
+   RevitTransformPlugin.bundle/              ← Required .bundle wrapper
+   ├── PackageContents.xml                   ← Must be at .bundle root
+   └── Contents/
+       ├── RevitTransformPlugin.dll
+       ├── Newtonsoft.Json.dll
+       └── DesignAutomationBridge.dll
+   ```
+   
+   **Commands to create the structure:**
+   ```bash
+   # From your project root
+   mkdir -p RevitTransformPlugin.bundle/Contents
+   
+   # Copy DLLs to Contents folder
+   cp RevitPlugin/bin/Release/RevitTransformPlugin.dll RevitTransformPlugin.bundle/Contents/
+   cp RevitPlugin/bin/Release/Newtonsoft.Json.dll RevitTransformPlugin.bundle/Contents/
+   cp RevitPlugin/bin/Release/DesignAutomationBridge.dll RevitTransformPlugin.bundle/Contents/
+   
+   # Copy PackageContents.xml to .bundle root (NOT Contents)
+   cp PackageContents.xml RevitTransformPlugin.bundle/
+   ```
+
+9. **Create the ZIP file:**
+   ```bash
+   zip -r RevitTransformPlugin.zip RevitTransformPlugin.bundle
+   ```
+   
+   **CRITICAL:** The ZIP must contain the `RevitTransformPlugin.bundle/` folder at the top level, not just its contents.
+
+10. Place `RevitTransformPlugin.zip` in the root of this project
 
 **PackageContents.xml:**
 ```xml
@@ -38,9 +65,9 @@ This directory contains automation scripts to simplify the AppBundle registratio
                      FriendlyVersion="1.0.0">
   <CompanyDetails Name="Your Company" />
   <Components Description="Revit Transform Application">
-    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2024" SeriesMax="R2024" />
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2025" SeriesMax="R2025" />
     <ComponentEntry AppName="RevitTransformApp" 
-                    ModuleName="./Contents/YourCompiledDll.dll" 
+                    ModuleName="./Contents/RevitTransformPlugin.dll" 
                     AppDescription="Transforms element positions" 
                     LoadOnRevitStartup="False" 
                     LoadOnCommandInvocation="True">
