@@ -25,8 +25,8 @@ const __dirname = path.dirname(__filename);
 // Configuration
 const CLIENT_ID = process.env.AUTODESK_CLIENT_ID || 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
 const CLIENT_SECRET = process.env.AUTODESK_CLIENT_SECRET;
-const APPBUNDLE_NAME = 'RevitTransformApp';
-const ACTIVITY_NAME = 'RevitTransformActivity';
+const APPBUNDLE_NAME = 'RevitTransformAppV2';
+const ACTIVITY_NAME = 'RevitTransformActivityV2';
 const ENGINE = 'Autodesk.Revit+2025';
 const ZIP_PATH = path.join(__dirname, '..', 'RevitTransformPlugin.zip');
 
@@ -240,7 +240,7 @@ async function createOrUpdateAppBundleAlias(token, version) {
   // Try to update existing alias first (PATCH)
   let options = {
     hostname: 'developer.api.autodesk.com',
-    path: `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/aliases/v1`,
+    path: `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/aliases/1`,
     method: 'PATCH',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -257,7 +257,7 @@ async function createOrUpdateAppBundleAlias(token, version) {
       console.log('⚠️  Alias not found, creating new alias...');
       options.method = 'POST';
       options.path = `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/aliases`;
-      aliasSpec.id = 'v1';
+      aliasSpec.id = '1';
       
       await makeRequest(options, aliasSpec);
       console.log('✅ AppBundle alias created');
@@ -274,7 +274,7 @@ async function createActivityVersion(token) {
   const activitySpec = {
     engine: ENGINE,
     commandLine: [`$(engine.path)\\\\revitcoreconsole.exe /i "$(args[inputFile].path)" /al "$(appbundles[${APPBUNDLE_NAME}].path)"`],
-    appbundles: [`${CLIENT_ID}.${APPBUNDLE_NAME}+v1`],
+    appbundles: [`${CLIENT_ID}.${APPBUNDLE_NAME}+1`],
     parameters: {
       inputFile: {
         verb: 'get',
@@ -319,7 +319,7 @@ async function createActivity(token) {
     id: ACTIVITY_NAME,
     engine: ENGINE,
     commandLine: [`$(engine.path)\\\\revitcoreconsole.exe /i "$(args[inputFile].path)" /al "$(appbundles[${APPBUNDLE_NAME}].path)"`],
-    appbundles: [`${CLIENT_ID}.${APPBUNDLE_NAME}+v1`],
+    appbundles: [`${CLIENT_ID}.${APPBUNDLE_NAME}+1`],
     parameters: {
       inputFile: {
         verb: 'get',
@@ -395,7 +395,7 @@ async function createOrUpdateActivityAlias(token, version) {
   // Try to update existing alias first (PATCH)
   let options = {
     hostname: 'developer.api.autodesk.com',
-    path: `/da/us-east/v3/activities/${ACTIVITY_NAME}/aliases/v1`,
+    path: `/da/us-east/v3/activities/${ACTIVITY_NAME}/aliases/1`,
     method: 'PATCH',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -412,7 +412,7 @@ async function createOrUpdateActivityAlias(token, version) {
       console.log('⚠️  Alias not found, creating new alias...');
       options.method = 'POST';
       options.path = `/da/us-east/v3/activities/${ACTIVITY_NAME}/aliases`;
-      aliasSpec.id = 'v1';
+      aliasSpec.id = '1';
       
       await makeRequest(options, aliasSpec);
       console.log('✅ Activity alias created');
@@ -454,8 +454,8 @@ async function setup() {
 
     console.log('\n✨ Setup completed successfully!');
     console.log('\n📋 Summary:');
-    console.log(`   AppBundle: ${CLIENT_ID}.${APPBUNDLE_NAME}+v1 (→ version ${latestAppBundleVersion})`);
-    console.log(`   Activity: ${CLIENT_ID}.${ACTIVITY_NAME}+v1 (→ version ${latestActivityVersion})`);
+    console.log(`   AppBundle: ${CLIENT_ID}.${APPBUNDLE_NAME}+1 (→ version ${latestAppBundleVersion})`);
+    console.log(`   Activity: ${CLIENT_ID}.${ACTIVITY_NAME}+1 (→ version ${latestActivityVersion})`);
     console.log('\n🎉 Your edge function is now ready to use Design Automation!');
     console.log('   Try moving an element in the viewer and clicking Save.');
 
