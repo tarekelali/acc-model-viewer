@@ -13,9 +13,14 @@
  *   node scripts/setup-appbundle.js
  */
 
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuration
 const CLIENT_ID = process.env.AUTODESK_CLIENT_ID || 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
@@ -45,20 +50,35 @@ function makeRequest(options, data = null) {
       res.on('data', chunk => body += chunk);
       res.on('end', () => {
         try {
-          const response = body ? JSON.parse(body) : {};
+          // For binary uploads (PUT with octet-stream), empty body is success
           if (res.statusCode >= 200 && res.statusCode < 300) {
+            const response = body ? JSON.parse(body) : {};
             resolve({ statusCode: res.statusCode, data: response });
           } else {
             reject(new Error(`HTTP ${res.statusCode}: ${body}`));
           }
         } catch (e) {
-          reject(new Error(`Failed to parse response: ${body}`));
+          // If response is not JSON (e.g., XML error), return the raw body
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve({ statusCode: res.statusCode, data: body || {} });
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+          }
         }
       });
     });
 
     req.on('error', reject);
-    if (data) req.write(typeof data === 'string' ? data : JSON.stringify(data));
+    if (data) {
+      // Handle Buffer (binary data) directly
+      if (Buffer.isBuffer(data)) {
+        req.write(data);
+      } else if (typeof data === 'string') {
+        req.write(data);
+      } else {
+        req.write(JSON.stringify(data));
+      }
+    }
     req.end();
   });
 }
@@ -151,17 +171,41 @@ async function uploadAppBundle(token, uploadParams) {
   const zipData = fs.readFileSync(ZIP_PATH);
   const uploadUrl = new URL(uploadParams.endpointURL);
 
+  // S3 POST form upload requires multipart form data
+  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+  const formData = uploadParams.formData;
+  
+  // Build multipart form body
+  let body = '';
+  
+  // Add all form fields
+  for (const [key, value] of Object.entries(formData)) {
+    body += `--${boundary}\r\n`;
+    body += `Content-Disposition: form-data; name="${key}"\r\n\r\n`;
+    body += `${value}\r\n`;
+  }
+  
+  // Add file field
+  body += `--${boundary}\r\n`;
+  body += `Content-Disposition: form-data; name="file"; filename="RevitTransformPlugin.zip"\r\n`;
+  body += `Content-Type: application/octet-stream\r\n\r\n`;
+  
+  // Convert body start to buffer, append file, then add closing boundary
+  const bodyStart = Buffer.from(body, 'utf8');
+  const bodyEnd = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+  const fullBody = Buffer.concat([bodyStart, zipData, bodyEnd]);
+
   const options = {
     hostname: uploadUrl.hostname,
-    path: uploadUrl.pathname + uploadUrl.search,
-    method: 'PUT',
+    path: uploadUrl.pathname,
+    method: 'POST',
     headers: {
-      'Content-Type': 'application/octet-stream',
-      'Content-Length': zipData.length
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': fullBody.length
     }
   };
 
-  await makeRequest(options, zipData);
+  await makeRequest(options, fullBody);
   console.log('✅ AppBundle ZIP uploaded');
 }
 
@@ -394,7 +438,8 @@ async function setup() {
     if (appBundle.uploadParameters) {
       await uploadAppBundle(token, appBundle.uploadParameters);
     } else {
-      console.log('⚠️  No upload needed (AppBundle already exists)');
+      console.log('⚠️  No upload parameters in response');
+      console.log('   This might mean the version was created but upload is needed separately');
     }
     
     // Get latest AppBundle version and update alias
