@@ -55,28 +55,47 @@ You need to **compile and register the Revit Plugin** with Design Automation. Th
    
    Create this folder structure:
    ```
-   RevitTransformPlugin.bundle/
-   ├── Contents/
-   │   ├── RevitTransformPlugin.dll
-   │   ├── Newtonsoft.Json.dll
-   │   └── PackageContents.xml
+   RevitTransformPlugin.bundle/              ← Required .bundle wrapper
+   ├── PackageContents.xml                   ← Must be at .bundle root
+   └── Contents/
+       ├── RevitTransformPlugin.dll
+       ├── Newtonsoft.Json.dll
+       └── DesignAutomationBridge.dll
    ```
 
    **PackageContents.xml:**
    ```xml
    <?xml version="1.0" encoding="utf-8"?>
-   <ApplicationPackage>
-     <Components>
-       <RuntimeRequirements OS="Win64" Platform=".NET" SeriesMin="R2024" SeriesMax="R2024" />
-       <ComponentEntry 
-         AppName="RevitTransformPlugin" 
-         ModuleName="./Contents/RevitTransformPlugin.dll" 
-         AppDescription="Element Transform Plugin" />
+   <ApplicationPackage SchemaVersion="1.0" 
+                        AutodeskProduct="Revit" 
+                        ProductType="Application" 
+                        Name="RevitTransformApp" 
+                        AppVersion="1.0.0" 
+                        Description="Transforms element positions in Revit"
+                        Author="Your Name"
+                        FriendlyVersion="1.0.0">
+     <CompanyDetails Name="Your Company" />
+     <Components Description="Revit Transform Application">
+       <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2025" SeriesMax="R2025" />
+       <ComponentEntry AppName="RevitTransformApp" 
+                       ModuleName="./Contents/RevitTransformPlugin.dll" 
+                       AppDescription="Transforms element positions" 
+                       LoadOnRevitStartup="False" 
+                       LoadOnCommandInvocation="True">
+         <Commands GroupName="Autodesk">
+           <Command Global="TransformApp" Local="TransformApp" />
+         </Commands>
+       </ComponentEntry>
      </Components>
    </ApplicationPackage>
    ```
 
-6. **Create a ZIP file** of the entire `.bundle` folder
+6. **Create a ZIP file** containing the `.bundle` folder:
+   ```bash
+   zip -r RevitTransformPlugin.zip RevitTransformPlugin.bundle
+   ```
+   
+   **CRITICAL:** The ZIP must contain the `RevitTransformPlugin.bundle/` folder at the top level, not just its contents.
 
 ### Step 2: Register with Design Automation API
 
