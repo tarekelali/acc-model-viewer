@@ -1196,12 +1196,21 @@ const Viewer = () => {
           console.error('=== END FULL ERROR RESPONSE ===\n');
 
           if (statusData.reportContent) {
-            console.error('\n📄 Report Content (last 1000 chars):');
-            console.error(statusData.reportContent.slice(-1000));
+            console.error('\n📄 FULL Report Content (no truncation):');
+            console.error(statusData.reportContent);
+            
+            console.error('\n📄 Report Content (line by line):');
+            const lines = statusData.reportContent.split('\n');
+            lines.forEach((line: string, i: number) => console.log(`[${i}] ${line}`));
+          }
+
+          if (statusData.reportUrl) {
+            console.error('\n🔗 Click to open full report in browser:');
+            console.error(statusData.reportUrl);
           }
 
           const errorMsg = statusData.reportContent
-            ? `Design Automation failed: ${statusData.reportContent.slice(-500)}`
+            ? `Design Automation failed. See full report above or at: ${statusData.reportUrl || 'N/A'}`
             : 'Design Automation job failed';
           throw new Error(errorMsg);
         }
