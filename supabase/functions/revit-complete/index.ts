@@ -28,13 +28,13 @@ serve(async (req) => {
 
     console.log('[REVIT-COMPLETE] Processing completion for:', { projectId, itemId, bucketKeyTemp, outputObjectKey });
 
-    // Get 2-legged token for OSS operations
+    // Get SSA 2-legged token for ACC operations
     const clientId = 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
-    const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
+    const clientSecret = Deno.env.get('AUTODESK_SSA_CLIENT_SECRET');
 
     if (!clientSecret) {
       return new Response(
-        JSON.stringify({ error: 'AUTODESK_CLIENT_SECRET not configured' }),
+        JSON.stringify({ error: 'AUTODESK_SSA_CLIENT_SECRET not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -46,7 +46,7 @@ serve(async (req) => {
         grant_type: 'client_credentials',
         client_id: clientId,
         client_secret: clientSecret,
-        scope: 'bucket:read data:read data:write',
+        scope: 'data:read data:write data:create bucket:read',
       }),
     });
 
@@ -121,7 +121,7 @@ serve(async (req) => {
     
     const itemResponse = await fetch(
       `https://developer.api.autodesk.com/data/v1/projects/b.${projectId}/items/${itemId}`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
+      { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
     );
 
     if (!itemResponse.ok) {
@@ -163,7 +163,7 @@ serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${twoLeggedToken}`,
           'Content-Type': 'application/vnd.api+json'
         },
         body: JSON.stringify(storagePayload)
@@ -196,7 +196,7 @@ serve(async (req) => {
       {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${twoLeggedToken}`,
           'Content-Type': 'application/octet-stream'
         },
         body: modifiedFile
@@ -252,7 +252,7 @@ serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${twoLeggedToken}`,
           'Content-Type': 'application/vnd.api+json'
         },
         body: JSON.stringify(versionPayload)
