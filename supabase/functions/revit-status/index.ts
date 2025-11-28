@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { decompress } from "https://deno.land/x/zip@v1.2.5/mod.ts";
+import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -111,66 +111,44 @@ serve(async (req) => {
       response.debugInfoUrl = statusData.debugInfoUrl;
       console.log('[REVIT-STATUS] Debug info URL available:', statusData.debugInfoUrl);
 
-      // Download and extract debug ZIP
+      // Download and extract debug ZIP using JSZip
       try {
         console.log('[REVIT-STATUS] Downloading debug ZIP...');
         const debugResponse = await fetch(statusData.debugInfoUrl);
         
         if (debugResponse.ok) {
           const debugArrayBuffer = await debugResponse.arrayBuffer();
-          const debugUint8Array = new Uint8Array(debugArrayBuffer);
+          console.log('[REVIT-STATUS] Debug ZIP downloaded, size:', debugArrayBuffer.byteLength);
           
-          console.log('[REVIT-STATUS] Debug ZIP downloaded, size:', debugUint8Array.length);
+          // Use JSZip to extract in memory (pure JS, no Deno.run needed)
+          const zip = await JSZip.loadAsync(debugArrayBuffer);
           
-          // Create a temporary file to unzip
-          const tempZipPath = await Deno.makeTempFile({ suffix: '.zip' });
-          await Deno.writeFile(tempZipPath, debugUint8Array);
-          
-          const tempDir = await Deno.makeTempDir();
-          await decompress(tempZipPath, tempDir);
-          
-          console.log('[REVIT-STATUS] Debug ZIP extracted to:', tempDir);
-          
-          // Read all files in the extracted directory
           const debugContent: any = {
             journalFiles: [],
             otherFiles: []
           };
           
-          async function readDirectory(dir: string, relativePath = '') {
-            for await (const entry of Deno.readDir(dir)) {
-              const fullPath = `${dir}/${entry.name}`;
-              const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+          // Iterate through all files in the ZIP
+          for (const [filePath, zipEntry] of Object.entries(zip.files)) {
+            if ((zipEntry as any).dir) continue; // Skip directories
+            
+            if (filePath.endsWith('.jrn')) {
+              const content = await (zipEntry as any).async('string');
+              // Keep last 100KB of journal (most relevant)
+              const truncatedContent = content.length > 100000 
+                ? '...[truncated]...\n' + content.slice(-100000)
+                : content;
               
-              if (entry.isDirectory) {
-                await readDirectory(fullPath, relPath);
-              } else if (entry.isFile) {
-                if (entry.name.endsWith('.jrn')) {
-                  // Read journal file content
-                  const content = await Deno.readTextFile(fullPath);
-                  // Keep last 100KB of journal (most relevant)
-                  const truncatedContent = content.length > 100000 
-                    ? '...[truncated]...\n' + content.slice(-100000)
-                    : content;
-                  
-                  debugContent.journalFiles.push({
-                    name: relPath,
-                    size: content.length,
-                    content: truncatedContent
-                  });
-                  console.log('[REVIT-STATUS] Found journal:', relPath, `(${content.length} bytes)`);
-                } else {
-                  debugContent.otherFiles.push(relPath);
-                }
-              }
+              debugContent.journalFiles.push({
+                name: filePath,
+                size: content.length,
+                content: truncatedContent
+              });
+              console.log('[REVIT-STATUS] Found journal:', filePath, `(${content.length} bytes)`);
+            } else {
+              debugContent.otherFiles.push(filePath);
             }
           }
-          
-          await readDirectory(tempDir);
-          
-          // Cleanup temp files
-          await Deno.remove(tempZipPath);
-          await Deno.remove(tempDir, { recursive: true });
           
           response.debugContent = debugContent;
           console.log('[REVIT-STATUS] Debug content extracted:', 
