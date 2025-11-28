@@ -124,29 +124,71 @@ serve(async (req) => {
           const zip = await JSZip.loadAsync(debugArrayBuffer);
           
           const debugContent: any = {
-            journalFiles: [],
-            otherFiles: []
+            allFiles: [],        // List of ALL files in ZIP
+            textFiles: [],       // Files with readable content
+            journalFiles: [],    // Keep journals separate for backwards compatibility
+            skippedFiles: []     // Large/binary files we skipped
           };
+          
+          // Define which extensions to read content from
+          const textExtensions = ['.jrn', '.log', '.txt', '.json', '.xml', '.addin', '.cfg', '.ini', '.err'];
+          const maxFileSize = 500000; // 500KB max per file
           
           // Iterate through all files in the ZIP
           for (const [filePath, zipEntry] of Object.entries(zip.files)) {
             if ((zipEntry as any).dir) continue; // Skip directories
             
-            if (filePath.endsWith('.jrn')) {
-              const content = await (zipEntry as any).async('string');
-              // Keep last 100KB of journal (most relevant)
-              const truncatedContent = content.length > 100000 
-                ? '...[truncated]...\n' + content.slice(-100000)
-                : content;
-              
-              debugContent.journalFiles.push({
+            debugContent.allFiles.push(filePath);
+            
+            const ext = filePath.toLowerCase().substring(filePath.lastIndexOf('.'));
+            const isTextFile = textExtensions.some(e => filePath.toLowerCase().endsWith(e));
+            
+            if (isTextFile) {
+              try {
+                const content = await (zipEntry as any).async('string');
+                
+                // Skip if file is too large (likely misidentified binary)
+                if (content.length > maxFileSize) {
+                  debugContent.skippedFiles.push({
+                    name: filePath,
+                    reason: `Too large (${content.length} bytes)`
+                  });
+                  continue;
+                }
+                
+                // Truncate large files
+                const truncatedContent = content.length > 100000 
+                  ? '...[truncated]...\n' + content.slice(-100000)
+                  : content;
+                
+                // Store in appropriate array
+                if (filePath.endsWith('.jrn')) {
+                  debugContent.journalFiles.push({
+                    name: filePath,
+                    size: content.length,
+                    content: truncatedContent
+                  });
+                  console.log('[REVIT-STATUS] Found journal:', filePath, `(${content.length} bytes)`);
+                } else {
+                  debugContent.textFiles.push({
+                    name: filePath,
+                    size: content.length,
+                    content: truncatedContent
+                  });
+                  console.log('[REVIT-STATUS] Read text file:', filePath, `(${content.length} bytes)`);
+                }
+              } catch (e) {
+                debugContent.skippedFiles.push({
+                  name: filePath,
+                  reason: `Error reading: ${e}`
+                });
+              }
+            } else if (!filePath.endsWith('.rvt')) {
+              // For non-text, non-RVT files, note their existence
+              debugContent.skippedFiles.push({
                 name: filePath,
-                size: content.length,
-                content: truncatedContent
+                reason: 'Binary or non-text file'
               });
-              console.log('[REVIT-STATUS] Found journal:', filePath, `(${content.length} bytes)`);
-            } else {
-              debugContent.otherFiles.push(filePath);
             }
           }
           
