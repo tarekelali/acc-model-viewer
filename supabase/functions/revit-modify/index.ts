@@ -626,7 +626,7 @@ serve(async (req) => {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Authorization': `Bearer ${ssaToken}`, // SSA app owns temp bucket
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -721,7 +721,7 @@ serve(async (req) => {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${twoLeggedToken}`,
+            'Authorization': `Bearer ${ssaToken}`, // SSA app owns temp bucket
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
