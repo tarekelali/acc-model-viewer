@@ -39,8 +39,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text;
+using System.Globalization;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB;
 using DesignAutomationFramework;
@@ -188,8 +188,7 @@ namespace RevitTransformPlugin
 
                 // Parse the JSON wrapper that contains the transforms dictionary
                 // Edge function sends: { "transforms": { "uniqueId": { "elementId": 123, "uniqueId": "...", "translation": {...} } } }
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var wrapper = JsonSerializer.Deserialize<TransformsWrapper>(json, options);
+                var wrapper = SimpleJsonParser.ParseTransforms(json);
 
                 if (wrapper?.Transforms == null || wrapper.Transforms.Count == 0)
                 {
@@ -344,45 +343,243 @@ namespace RevitTransformPlugin
         }
     }
 
+    /// <summary>
+    /// Zero-dependency manual JSON parser for Design Automation
+    /// Only parses our specific JSON structure - no external libraries required
+    /// </summary>
+    internal static class SimpleJsonParser
+    {
+        public static TransformsWrapper ParseTransforms(string json)
+        {
+            Console.WriteLine("[SimpleJsonParser] Parsing JSON with zero dependencies");
+            
+            var wrapper = new TransformsWrapper
+            {
+                Transforms = new Dictionary<string, ElementTransformData>()
+            };
+
+            // Find the "transforms" object
+            int transformsStart = json.IndexOf("\"transforms\"");
+            if (transformsStart == -1)
+            {
+                Console.WriteLine("[SimpleJsonParser] ERROR: 'transforms' key not found");
+                return wrapper;
+            }
+
+            // Find the opening brace of the transforms object
+            int braceStart = json.IndexOf('{', transformsStart);
+            if (braceStart == -1) return wrapper;
+
+            // Find matching closing brace
+            int braceEnd = FindMatchingBrace(json, braceStart);
+            if (braceEnd == -1) return wrapper;
+
+            // Extract the transforms object content
+            string transformsContent = json.Substring(braceStart + 1, braceEnd - braceStart - 1);
+            
+            // Split by top-level commas to get each element's data
+            var elementBlocks = SplitTopLevelObjects(transformsContent);
+            
+            Console.WriteLine($"[SimpleJsonParser] Found {elementBlocks.Count} element transform(s)");
+
+            foreach (var block in elementBlocks)
+            {
+                try
+                {
+                    // Extract the key (uniqueId) - it's the first quoted string
+                    int keyStart = block.IndexOf('"');
+                    int keyEnd = block.IndexOf('"', keyStart + 1);
+                    if (keyStart == -1 || keyEnd == -1) continue;
+                    
+                    string key = block.Substring(keyStart + 1, keyEnd - keyStart - 1);
+
+                    // Extract the value object
+                    int valueStart = block.IndexOf('{', keyEnd);
+                    int valueEnd = FindMatchingBrace(block, valueStart);
+                    if (valueStart == -1 || valueEnd == -1) continue;
+
+                    string valueContent = block.Substring(valueStart + 1, valueEnd - valueStart - 1);
+
+                    // Parse the ElementTransformData
+                    var transformData = new ElementTransformData
+                    {
+                        ElementId = ExtractInt(valueContent, "elementId"),
+                        UniqueId = ExtractString(valueContent, "uniqueId"),
+                        ElementName = ExtractString(valueContent, "elementName"),
+                        OriginalPosition = ExtractVector3(valueContent, "originalPosition"),
+                        NewPosition = ExtractVector3(valueContent, "newPosition"),
+                        Translation = ExtractVector3(valueContent, "translation")
+                    };
+
+                    wrapper.Transforms[key] = transformData;
+                    Console.WriteLine($"[SimpleJsonParser] Parsed element: {key} -> ElementId={transformData.ElementId}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SimpleJsonParser] Error parsing block: {ex.Message}");
+                }
+            }
+
+            return wrapper;
+        }
+
+        private static int FindMatchingBrace(string str, int openPos)
+        {
+            int depth = 1;
+            for (int i = openPos + 1; i < str.Length; i++)
+            {
+                if (str[i] == '{') depth++;
+                else if (str[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0) return i;
+                }
+            }
+            return -1;
+        }
+
+        private static List<string> SplitTopLevelObjects(string content)
+        {
+            var blocks = new List<string>();
+            int depth = 0;
+            int start = 0;
+
+            for (int i = 0; i < content.Length; i++)
+            {
+                if (content[i] == '{') depth++;
+                else if (content[i] == '}') depth--;
+                else if (content[i] == ',' && depth == 0)
+                {
+                    blocks.Add(content.Substring(start, i - start).Trim());
+                    start = i + 1;
+                }
+            }
+
+            if (start < content.Length)
+            {
+                blocks.Add(content.Substring(start).Trim());
+            }
+
+            return blocks;
+        }
+
+        private static int ExtractInt(string content, string key)
+        {
+            string pattern = $"\"{key}\"";
+            int keyPos = content.IndexOf(pattern);
+            if (keyPos == -1) return 0;
+
+            int colonPos = content.IndexOf(':', keyPos);
+            if (colonPos == -1) return 0;
+
+            int start = colonPos + 1;
+            while (start < content.Length && (char.IsWhiteSpace(content[start]) || content[start] == '"'))
+                start++;
+
+            int end = start;
+            while (end < content.Length && (char.IsDigit(content[end]) || content[end] == '-'))
+                end++;
+
+            if (end > start)
+            {
+                string numStr = content.Substring(start, end - start);
+                if (int.TryParse(numStr, out int result))
+                    return result;
+            }
+
+            return 0;
+        }
+
+        private static string ExtractString(string content, string key)
+        {
+            string pattern = $"\"{key}\"";
+            int keyPos = content.IndexOf(pattern);
+            if (keyPos == -1) return null;
+
+            int colonPos = content.IndexOf(':', keyPos);
+            if (colonPos == -1) return null;
+
+            int quoteStart = content.IndexOf('"', colonPos);
+            if (quoteStart == -1) return null;
+
+            int quoteEnd = content.IndexOf('"', quoteStart + 1);
+            if (quoteEnd == -1) return null;
+
+            return content.Substring(quoteStart + 1, quoteEnd - quoteStart - 1);
+        }
+
+        private static Vector3 ExtractVector3(string content, string key)
+        {
+            string pattern = $"\"{key}\"";
+            int keyPos = content.IndexOf(pattern);
+            if (keyPos == -1) return new Vector3();
+
+            int braceStart = content.IndexOf('{', keyPos);
+            if (braceStart == -1) return new Vector3();
+
+            int braceEnd = FindMatchingBrace(content, braceStart);
+            if (braceEnd == -1) return new Vector3();
+
+            string vectorContent = content.Substring(braceStart + 1, braceEnd - braceStart - 1);
+
+            return new Vector3
+            {
+                X = ExtractDouble(vectorContent, "x"),
+                Y = ExtractDouble(vectorContent, "y"),
+                Z = ExtractDouble(vectorContent, "z")
+            };
+        }
+
+        private static double ExtractDouble(string content, string key)
+        {
+            string pattern = $"\"{key}\"";
+            int keyPos = content.IndexOf(pattern);
+            if (keyPos == -1) return 0.0;
+
+            int colonPos = content.IndexOf(':', keyPos);
+            if (colonPos == -1) return 0.0;
+
+            int start = colonPos + 1;
+            while (start < content.Length && (char.IsWhiteSpace(content[start]) || content[start] == '"'))
+                start++;
+
+            int end = start;
+            while (end < content.Length && (char.IsDigit(content[end]) || content[end] == '.' || content[end] == '-' || content[end] == 'e' || content[end] == 'E' || content[end] == '+'))
+                end++;
+
+            if (end > start)
+            {
+                string numStr = content.Substring(start, end - start);
+                if (double.TryParse(numStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double result))
+                    return result;
+            }
+
+            return 0.0;
+        }
+    }
+
     // Data models for JSON deserialization
     // Edge function wraps transforms in an object
     // Format: { "transforms": { "uniqueId": { "elementId": 123, "uniqueId": "...", "translation": {...} } } }
     public class TransformsWrapper
     {
-        [JsonPropertyName("transforms")]
         public Dictionary<string, ElementTransformData> Transforms { get; set; }
     }
 
     public class ElementTransformData
     {
-        [JsonPropertyName("elementId")]
         public int ElementId { get; set; }
-
-        [JsonPropertyName("uniqueId")]
         public string UniqueId { get; set; }
-
-        [JsonPropertyName("elementName")]
         public string ElementName { get; set; }
-
-        [JsonPropertyName("originalPosition")]
         public Vector3 OriginalPosition { get; set; }
-
-        [JsonPropertyName("newPosition")]
         public Vector3 NewPosition { get; set; }
-
-        [JsonPropertyName("translation")]
         public Vector3 Translation { get; set; }
     }
 
     public class Vector3
     {
-        [JsonPropertyName("x")]
         public double X { get; set; }
-
-        [JsonPropertyName("y")]
         public double Y { get; set; }
-
-        [JsonPropertyName("z")]
         public double Z { get; set; }
     }
 }
