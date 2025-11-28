@@ -200,7 +200,11 @@ serve(async (req) => {
         headers: {
           'Authorization': `Bearer ${twoLeggedToken}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          minutesExpiration: 30,
+          useCdn: false
+        })
       }
     );
 
