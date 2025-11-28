@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { decompress } from "https://deno.land/x/zip@v1.2.5/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -102,6 +103,82 @@ serve(async (req) => {
         } catch (e) {
           console.error('[REVIT-STATUS] Error fetching report:', e);
         }
+      }
+    }
+
+    // Include debug info URL if available
+    if (statusData.debugInfoUrl) {
+      response.debugInfoUrl = statusData.debugInfoUrl;
+      console.log('[REVIT-STATUS] Debug info URL available:', statusData.debugInfoUrl);
+
+      // Download and extract debug ZIP
+      try {
+        console.log('[REVIT-STATUS] Downloading debug ZIP...');
+        const debugResponse = await fetch(statusData.debugInfoUrl);
+        
+        if (debugResponse.ok) {
+          const debugArrayBuffer = await debugResponse.arrayBuffer();
+          const debugUint8Array = new Uint8Array(debugArrayBuffer);
+          
+          console.log('[REVIT-STATUS] Debug ZIP downloaded, size:', debugUint8Array.length);
+          
+          // Create a temporary file to unzip
+          const tempZipPath = await Deno.makeTempFile({ suffix: '.zip' });
+          await Deno.writeFile(tempZipPath, debugUint8Array);
+          
+          const tempDir = await Deno.makeTempDir();
+          await decompress(tempZipPath, tempDir);
+          
+          console.log('[REVIT-STATUS] Debug ZIP extracted to:', tempDir);
+          
+          // Read all files in the extracted directory
+          const debugContent: any = {
+            journalFiles: [],
+            otherFiles: []
+          };
+          
+          async function readDirectory(dir: string, relativePath = '') {
+            for await (const entry of Deno.readDir(dir)) {
+              const fullPath = `${dir}/${entry.name}`;
+              const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+              
+              if (entry.isDirectory) {
+                await readDirectory(fullPath, relPath);
+              } else if (entry.isFile) {
+                if (entry.name.endsWith('.jrn')) {
+                  // Read journal file content
+                  const content = await Deno.readTextFile(fullPath);
+                  // Keep last 100KB of journal (most relevant)
+                  const truncatedContent = content.length > 100000 
+                    ? '...[truncated]...\n' + content.slice(-100000)
+                    : content;
+                  
+                  debugContent.journalFiles.push({
+                    name: relPath,
+                    size: content.length,
+                    content: truncatedContent
+                  });
+                  console.log('[REVIT-STATUS] Found journal:', relPath, `(${content.length} bytes)`);
+                } else {
+                  debugContent.otherFiles.push(relPath);
+                }
+              }
+            }
+          }
+          
+          await readDirectory(tempDir);
+          
+          // Cleanup temp files
+          await Deno.remove(tempZipPath);
+          await Deno.remove(tempDir, { recursive: true });
+          
+          response.debugContent = debugContent;
+          console.log('[REVIT-STATUS] Debug content extracted:', 
+            `${debugContent.journalFiles.length} journals, ${debugContent.otherFiles.length} other files`);
+        }
+      } catch (e) {
+        console.error('[REVIT-STATUS] Error processing debug ZIP:', e);
+        response.debugError = e instanceof Error ? e.message : 'Unknown error processing debug info';
       }
     }
 
