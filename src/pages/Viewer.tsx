@@ -41,15 +41,34 @@ const BUILD_VERSION = "v2.0.0-translation-fix";
 
 // Helper to download text as a file
 const downloadDebugReport = (content: string, filename: string) => {
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  try {
+    console.log('[DOWNLOAD] Starting debug report download:', filename);
+    console.log('[DOWNLOAD] Content size:', content.length, 'bytes');
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    console.log('[DOWNLOAD] Blob created:', blob.size, 'bytes');
+    
+    const url = URL.createObjectURL(blob);
+    console.log('[DOWNLOAD] Object URL created:', url);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    console.log('[DOWNLOAD] Link element created, triggering download...');
+    
+    document.body.appendChild(a);
+    a.click();
+    console.log('[DOWNLOAD] Click triggered');
+    
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    console.log('[DOWNLOAD] ✅ Download completed successfully');
+    
+    return true;
+  } catch (err) {
+    console.error('[DOWNLOAD] ❌ Download failed:', err);
+    return false;
+  }
 };
 
 // Generate comprehensive debug report for sharing
@@ -1319,6 +1338,7 @@ const Viewer = () => {
           }
 
           // Generate and auto-download debug report
+          console.log('\n📥 Generating debug report...');
           const debugReport = generateDebugReport({
             workItemId,
             status,
@@ -1326,11 +1346,20 @@ const Viewer = () => {
             transformsSent: transformsObject,
             error: null
           });
+          console.log('📥 Debug report generated, size:', debugReport.length, 'bytes');
           
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-          downloadDebugReport(debugReport, `debug-report-${timestamp}.txt`);
-          console.log('\n📥 Debug report downloaded automatically as debug-report-' + timestamp + '.txt');
-          toast.info('Debug report downloaded');
+          const filename = `debug-report-${timestamp}.txt`;
+          console.log('📥 Attempting download as:', filename);
+          
+          const downloadSuccess = downloadDebugReport(debugReport, filename);
+          if (downloadSuccess) {
+            console.log('\n✅ Debug report downloaded successfully as', filename);
+            toast.success('Debug report downloaded: ' + filename);
+          } else {
+            console.error('\n❌ Debug report download failed');
+            toast.error('Debug report download failed - check console');
+          }
 
           const errorMsg = statusData.reportContent
             ? `Design Automation failed. See full report above or at: ${statusData.reportUrl || 'N/A'}`

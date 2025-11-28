@@ -193,8 +193,8 @@ serve(async (req) => {
           }
           
           response.debugContent = debugContent;
-          console.log('[REVIT-STATUS] Debug content extracted:', 
-            `${debugContent.journalFiles.length} journals, ${debugContent.otherFiles.length} other files`);
+      console.log('[REVIT-STATUS] Debug content extracted:', 
+        `${debugContent.journalFiles.length} journals, ${debugContent.textFiles.length} text files, ${debugContent.allFiles.length} total files`);
         }
       } catch (e) {
         console.error('[REVIT-STATUS] Error processing debug ZIP:', e);
