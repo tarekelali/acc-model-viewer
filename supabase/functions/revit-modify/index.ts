@@ -1003,6 +1003,9 @@ serve(async (req) => {
             'Content-Type': 'application/octet-stream'
           }
         }
+      },
+      adskDebug: {
+        uploadJobFolder: true
       }
     };
 
