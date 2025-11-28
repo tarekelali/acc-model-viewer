@@ -29,7 +29,7 @@ serve(async (req) => {
     console.log('[REVIT-COMPLETE] Processing completion for:', { projectId, itemId, bucketKeyTemp, outputObjectKey });
 
     // Get SSA 2-legged token for ACC operations
-    const clientId = 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
+    const clientId = 'DfARgfaBERc4spAWY2UOoKBKLH475EKX372DBiy0r9tYTKeL'; // SSA app
     const clientSecret = Deno.env.get('AUTODESK_SSA_CLIENT_SECRET');
 
     if (!clientSecret) {
