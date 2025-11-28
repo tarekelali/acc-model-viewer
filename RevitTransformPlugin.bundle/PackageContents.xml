@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage SchemaVersion="1.0" 
+                     AutodeskProduct="Revit" 
+                     ProductType="Application" 
+                     Name="RevitTransformApp" 
+                     AppVersion="1.0.0" 
+                     Description="Transforms element positions in Revit"
+                     Author="Your Name"
+                     FriendlyVersion="1.0.0">
+  <CompanyDetails Name="Your Company" />
+  <Components Description="Revit Transform Application">
+    <RuntimeRequirements OS="Win64" Platform="Revit" SeriesMin="R2025" SeriesMax="R2025" />
+    <ComponentEntry AppName="RevitTransformApp" 
+                    ModuleName="./Contents/RevitTransformPlugin.addin"
+                    AppDescription="Transforms element positions" 
+                    LoadOnRevitStartup="True">
+    </ComponentEntry>
+  </Components>
+</ApplicationPackage>

@@ -129,6 +129,19 @@ async function createAppBundleVersion(token) {
 
   const result = await makeRequest(options, versionSpec);
   console.log('✅ New AppBundle version created');
+  
+  // Log the response structure for debugging
+  console.log('\n📋 Version creation response:');
+  console.log(`   Version: ${result.data.version || 'N/A'}`);
+  console.log(`   Has uploadParameters: ${!!result.data.uploadParameters}`);
+  
+  if (result.data.uploadParameters) {
+    console.log(`   Upload endpoint: ${result.data.uploadParameters.endpointURL}`);
+  } else {
+    console.log('   ⚠️  WARNING: No uploadParameters in response!');
+    console.log('   Full response keys:', Object.keys(result.data));
+  }
+  
   return result.data;
 }
 
@@ -224,7 +237,8 @@ async function getLatestAppBundleVersion(token) {
 
   const result = await makeRequest(options);
   const versions = result.data.data || [];
-  const latestVersion = Math.max(...versions);
+  console.log(`   Available versions: ${versions.join(', ')}`);
+  const latestVersion = versions.length > 0 ? Math.max(...versions) : 1;
   console.log(`✅ Latest AppBundle version: ${latestVersion}`);
   return latestVersion;
 }
@@ -434,17 +448,30 @@ async function setup() {
     const token = await getAccessToken();
     
     const appBundle = await createAppBundle(token);
+    const createdVersion = appBundle.version;
     
+    // Always attempt upload when creating a new version
     if (appBundle.uploadParameters) {
       await uploadAppBundle(token, appBundle.uploadParameters);
+      console.log(`✅ ZIP uploaded for version ${createdVersion}`);
     } else {
-      console.log('⚠️  No upload parameters in response');
-      console.log('   This might mean the version was created but upload is needed separately');
+      console.log('\n⚠️  WARNING: No upload parameters in response!');
+      console.log('   Response structure:', JSON.stringify(appBundle, null, 2));
+      console.log('   This version was created but the ZIP was NOT uploaded.');
+      console.log('   The version will not work without the ZIP file.');
+      throw new Error(`Version ${createdVersion} was created but upload parameters are missing. Cannot proceed.`);
     }
     
-    // Get latest AppBundle version and update alias
-    const latestAppBundleVersion = await getLatestAppBundleVersion(token);
-    await createOrUpdateAppBundleAlias(token, latestAppBundleVersion);
+    // Use the version we just created instead of querying (which may have propagation delay)
+    if (createdVersion) {
+      console.log(`\n🏷️  Updating AppBundle alias to version ${createdVersion} (just created)...`);
+      await createOrUpdateAppBundleAlias(token, createdVersion);
+    } else {
+      // Fallback: Get latest AppBundle version and update alias
+      console.log('\n⚠️  Version number not in response, querying for latest...');
+      const latestAppBundleVersion = await getLatestAppBundleVersion(token);
+      await createOrUpdateAppBundleAlias(token, latestAppBundleVersion);
+    }
     
     await createActivity(token);
     
@@ -454,7 +481,7 @@ async function setup() {
 
     console.log('\n✨ Setup completed successfully!');
     console.log('\n📋 Summary:');
-    console.log(`   AppBundle: ${CLIENT_ID}.${APPBUNDLE_NAME}+1 (→ version ${latestAppBundleVersion})`);
+    console.log(`   AppBundle: ${CLIENT_ID}.${APPBUNDLE_NAME}+1 (→ version ${createdVersion || 'unknown'})`);
     console.log(`   Activity: ${CLIENT_ID}.${ACTIVITY_NAME}+1 (→ version ${latestActivityVersion})`);
     console.log('\n🎉 Your edge function is now ready to use Design Automation!');
     console.log('   Try moving an element in the viewer and clicking Save.');
