@@ -777,13 +777,14 @@ serve(async (req) => {
       return parseInt(hexId, 16); // Convert hex to decimal
     }
     
-    // Convert transforms object to array format expected by C# plugin with camelCase
-    const transformsArray = Object.entries(transforms).map(([uniqueId, transformData]: [string, any]) => {
+    // Convert transforms object to dictionary format expected by C# plugin (keyed by uniqueId)
+    const transformsDict: Record<string, any> = {};
+    Object.entries(transforms).forEach(([uniqueId, transformData]: [string, any]) => {
       const revitElementId = extractRevitElementId(uniqueId);
       
       console.log(`[TRANSFORM] ${transformData.elementName}: uniqueId=${uniqueId} → elementId=${revitElementId}`);
       
-      return {
+      transformsDict[uniqueId] = {
         elementId: revitElementId,          // ✅ Use actual Revit Element ID (not Viewer dbId)
         uniqueId: uniqueId,                 // ✅ Also send uniqueId for reference
         elementName: transformData.elementName,
@@ -796,12 +797,17 @@ serve(async (req) => {
           x: transformData.newPosition.x,
           y: transformData.newPosition.y,
           z: transformData.newPosition.z
+        },
+        translation: {
+          x: transformData.newPosition.x - transformData.originalPosition.x,
+          y: transformData.newPosition.y - transformData.originalPosition.y,
+          z: transformData.newPosition.z - transformData.originalPosition.z
         }
       };
     });
     
-    const transformsJson = JSON.stringify({ transforms: transformsArray });
-    console.log(`[STEP 5.5] Converted ${transformsArray.length} transform(s) to C# format`);
+    const transformsJson = JSON.stringify({ transforms: transformsDict });
+    console.log(`[STEP 5.5] Converted ${Object.keys(transformsDict).length} transform(s) to C# format`);
     const transformsKey = `transforms_${Date.now()}.json`;
 
     // Use batch signed S3 upload API
