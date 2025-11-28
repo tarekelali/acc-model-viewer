@@ -191,26 +191,71 @@ serve(async (req) => {
     const [newBucketKey, ...newObjectKeyParts] = newBucketAndObject.split('/');
     const newObjectKey = newObjectKeyParts.join('/');
 
-    const uploadModifiedResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}`,
+    // Step 1: Request signed upload URL
+    const encodedNewObjectKey = encodeURIComponent(newObjectKey);
+    const signedUploadResponse = await fetch(
+      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${encodedNewObjectKey}/signeds3upload`,
       {
-        method: 'PUT',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${twoLeggedToken}`,
-          'Content-Type': 'application/octet-stream'
-        },
-        body: modifiedFile
+          'Content-Type': 'application/json'
+        }
       }
     );
 
-    if (!uploadModifiedResponse.ok) {
-      const errorText = await uploadModifiedResponse.text();
+    if (!signedUploadResponse.ok) {
+      const errorText = await signedUploadResponse.text();
       return new Response(
         JSON.stringify({ 
-          error: 'Failed to upload modified file to ACC',
+          error: 'Failed to request signed upload URL',
           details: errorText 
         }),
-        { status: uploadModifiedResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: signedUploadResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const signedUploadData = await signedUploadResponse.json();
+    
+    // Step 2: Upload to signed S3 URL
+    const s3UploadResponse = await fetch(signedUploadData.urls[0], {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: modifiedFile
+    });
+
+    if (!s3UploadResponse.ok) {
+      const errorText = await s3UploadResponse.text();
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to upload to S3',
+          details: errorText 
+        }),
+        { status: s3UploadResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Step 3: Complete the upload
+    const completeUploadResponse = await fetch(
+      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${encodedNewObjectKey}/signeds3upload`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${twoLeggedToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ uploadKey: signedUploadData.uploadKey })
+      }
+    );
+
+    if (!completeUploadResponse.ok) {
+      const errorText = await completeUploadResponse.text();
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to complete upload',
+          details: errorText 
+        }),
+        { status: completeUploadResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
