@@ -61,19 +61,52 @@ serve(async (req) => {
     const tokenData = await tokenResponse.json();
     const twoLeggedToken = tokenData.access_token;
 
-    // ========== STEP 8: DOWNLOAD MODIFIED FILE ==========
-    console.log('[REVIT-COMPLETE] Downloading modified file from temp bucket...');
-    
-    const modifiedFileResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${outputObjectKey}`,
-      { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
-    );
+    // ========== STEP 8: DOWNLOAD MODIFIED FILE (via Signed S3 URL) ==========
+    console.log('[REVIT-COMPLETE] Getting signed download URL for modified file...');
+
+    const encodedObjectKey = encodeURIComponent(outputObjectKey);
+    const signedUrlEndpoint = `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${encodedObjectKey}/signeds3download`;
+
+    const signedUrlResponse = await fetch(signedUrlEndpoint, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${twoLeggedToken}`
+      }
+    });
+
+    if (!signedUrlResponse.ok) {
+      const errorText = await signedUrlResponse.text();
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to get signed download URL',
+          details: errorText 
+        }),
+        { status: signedUrlResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const signedUrlData = await signedUrlResponse.json();
+    const downloadUrl = signedUrlData.url;
+
+    if (!downloadUrl) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'No download URL in signed URL response',
+          details: signedUrlData 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[REVIT-COMPLETE] Downloading modified file from signed URL...');
+
+    const modifiedFileResponse = await fetch(downloadUrl); // No auth header needed for signed S3 URL
 
     if (!modifiedFileResponse.ok) {
       const errorText = await modifiedFileResponse.text();
       return new Response(
         JSON.stringify({ 
-          error: 'Failed to download modified file from temp bucket',
+          error: 'Failed to download modified file from signed URL',
           details: errorText 
         }),
         { status: modifiedFileResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -81,7 +114,7 @@ serve(async (req) => {
     }
 
     const modifiedFile = await modifiedFileResponse.blob();
-    console.log('[REVIT-COMPLETE] Modified file downloaded, size:', modifiedFile.size, 'bytes');
+    console.log('[REVIT-COMPLETE] ✓ Modified file downloaded, size:', modifiedFile.size, 'bytes');
 
     // ========== STEP 9: GET ITEM DETAILS ==========
     console.log('[REVIT-COMPLETE] Fetching item details...');
