@@ -127,22 +127,42 @@ async function createAppBundleVersion(token) {
     }
   };
 
-  const result = await makeRequest(options, versionSpec);
-  console.log('✅ New AppBundle version created');
-  
-  // Log the response structure for debugging
-  console.log('\n📋 Version creation response:');
-  console.log(`   Version: ${result.data.version || 'N/A'}`);
-  console.log(`   Has uploadParameters: ${!!result.data.uploadParameters}`);
-  
-  if (result.data.uploadParameters) {
-    console.log(`   Upload endpoint: ${result.data.uploadParameters.endpointURL}`);
-  } else {
-    console.log('   ⚠️  WARNING: No uploadParameters in response!');
-    console.log('   Full response keys:', Object.keys(result.data));
+  try {
+    const result = await makeRequest(options, versionSpec);
+    console.log('✅ New AppBundle version created');
+    
+    // Log the response structure for debugging
+    console.log('\n📋 Version creation response:');
+    console.log(`   Version: ${result.data.version || 'N/A'}`);
+    console.log(`   Has uploadParameters: ${!!result.data.uploadParameters}`);
+    
+    if (result.data.uploadParameters) {
+      console.log(`   Upload endpoint: ${result.data.uploadParameters.endpointURL}`);
+    } else {
+      console.log('   ⚠️  WARNING: No uploadParameters in response!');
+      console.log('   Full response keys:', Object.keys(result.data));
+    }
+    
+    return result.data;
+  } catch (error) {
+    // Handle maximum versions limit (403 error)
+    if (error.message.includes('403') && error.message.toLowerCase().includes('maximum')) {
+      console.log('⚠️  Maximum versions limit reached (100), triggering cleanup...');
+      await cleanupOldVersions(token, 10);
+      
+      // Retry version creation after cleanup
+      console.log('🔄 Retrying version creation...');
+      const result = await makeRequest(options, versionSpec);
+      console.log('✅ New AppBundle version created after cleanup');
+      
+      console.log('\n📋 Version creation response:');
+      console.log(`   Version: ${result.data.version || 'N/A'}`);
+      console.log(`   Has uploadParameters: ${!!result.data.uploadParameters}`);
+      
+      return result.data;
+    }
+    throw error;
   }
-  
-  return result.data;
 }
 
 // Create AppBundle
@@ -222,10 +242,8 @@ async function uploadAppBundle(token, uploadParams) {
   console.log('✅ AppBundle ZIP uploaded');
 }
 
-// Get latest AppBundle version
-async function getLatestAppBundleVersion(token) {
-  console.log('\n🔍 Getting latest AppBundle version...');
-  
+// List all AppBundle versions
+async function listAppBundleVersions(token) {
   const options = {
     hostname: 'developer.api.autodesk.com',
     path: `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/versions`,
@@ -236,7 +254,58 @@ async function getLatestAppBundleVersion(token) {
   };
 
   const result = await makeRequest(options);
-  const versions = result.data.data || [];
+  return result.data.data || [];
+}
+
+// Delete a specific AppBundle version
+async function deleteAppBundleVersion(token, version) {
+  const options = {
+    hostname: 'developer.api.autodesk.com',
+    path: `/da/us-east/v3/appbundles/${APPBUNDLE_NAME}/versions/${version}`,
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  };
+
+  await makeRequest(options);
+}
+
+// Cleanup old AppBundle versions, keeping only the latest N versions
+async function cleanupOldVersions(token, keepCount = 10) {
+  console.log(`\n🗑️  Cleaning up old AppBundle versions (keeping latest ${keepCount})...`);
+  
+  const versions = await listAppBundleVersions(token);
+  console.log(`   Found ${versions.length} total versions`);
+  
+  if (versions.length <= keepCount) {
+    console.log(`   No cleanup needed (${versions.length} <= ${keepCount})`);
+    return;
+  }
+  
+  // Sort versions numerically (newest first)
+  const sortedVersions = versions.sort((a, b) => b - a);
+  const versionsToDelete = sortedVersions.slice(keepCount);
+  
+  console.log(`   Deleting ${versionsToDelete.length} old versions...`);
+  
+  for (const version of versionsToDelete) {
+    try {
+      await deleteAppBundleVersion(token, version);
+      console.log(`   ✅ Deleted version ${version}`);
+    } catch (error) {
+      console.log(`   ⚠️  Failed to delete version ${version}: ${error.message}`);
+    }
+  }
+  
+  console.log(`✅ Cleanup complete. Deleted ${versionsToDelete.length} versions, kept ${keepCount} latest`);
+}
+
+// Get latest AppBundle version
+async function getLatestAppBundleVersion(token) {
+  console.log('\n🔍 Getting latest AppBundle version...');
+  
+  const versions = await listAppBundleVersions(token);
   console.log(`   Available versions: ${versions.join(', ')}`);
   const latestVersion = versions.length > 0 ? Math.max(...versions) : 1;
   console.log(`✅ Latest AppBundle version: ${latestVersion}`);
