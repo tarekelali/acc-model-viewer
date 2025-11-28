@@ -136,6 +136,34 @@ serve(async (req) => {
     }
 
     const itemData = await itemResponse.json();
+    
+    // Extract tip version ID to get original extension type
+    const tipVersionId = itemData.data.relationships?.tip?.data?.id;
+    if (!tipVersionId) {
+      return new Response(
+        JSON.stringify({ error: 'Missing tip version in item data' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log('[REVIT-COMPLETE] Fetching version details for:', tipVersionId);
+    
+    const versionResponse = await fetch(
+      `https://developer.api.autodesk.com/data/v1/projects/b.${projectId}/versions/${encodeURIComponent(tipVersionId)}`,
+      { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
+    );
+    
+    if (!versionResponse.ok) {
+      const errorText = await versionResponse.text();
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch version details', details: errorText }),
+        { status: versionResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    const versionData = await versionResponse.json();
+    const originalExtension = versionData.data.attributes?.extension;
+    console.log('[REVIT-COMPLETE] Original extension:', JSON.stringify(originalExtension));
 
     // ========== STEP 10: UPLOAD TO ACC STORAGE ==========
     console.log('[REVIT-COMPLETE] Uploading modified file back to ACC storage...');
@@ -279,10 +307,7 @@ serve(async (req) => {
         type: 'versions',
         attributes: {
           name: itemData.data.attributes.displayName,
-          extension: {
-            type: 'versions:autodesk.bim360:File',
-            version: '1.0'
-          }
+          extension: originalExtension  // Use the original extension to match MIME type
         },
         relationships: {
           item: {
