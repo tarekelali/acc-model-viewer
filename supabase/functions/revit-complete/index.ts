@@ -191,26 +191,19 @@ serve(async (req) => {
     const [newBucketKey, ...newObjectKeyParts] = newBucketAndObject.split('/');
     const newObjectKey = newObjectKeyParts.join('/');
 
-    // Step 1: Request signed upload URL
-    const uploadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`;
-    const uploadRequestBody = {
-      minutesExpiration: 30,
-      useCdn: false
-    };
+    // Step 1: Request signed upload URL (GET request to initiate)
+    const uploadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload?firstPart=1&parts=1`;
     
     console.log('[REVIT-COMPLETE] Requesting signed upload URL for bucket:', newBucketKey, 'object:', newObjectKey);
     console.log('[REVIT-COMPLETE] Full upload URL:', uploadUrl);
-    console.log('[REVIT-COMPLETE] Request body:', JSON.stringify(uploadRequestBody));
     
     const signedUploadResponse = await fetch(
       uploadUrl,
       {
-        method: 'POST',
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${twoLeggedToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(uploadRequestBody)
+          'Authorization': `Bearer ${twoLeggedToken}`
+        }
       }
     );
 
