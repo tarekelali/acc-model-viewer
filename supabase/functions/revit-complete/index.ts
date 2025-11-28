@@ -192,9 +192,8 @@ serve(async (req) => {
     const newObjectKey = newObjectKeyParts.join('/');
 
     // Step 1: Request signed upload URL
-    const encodedNewObjectKey = encodeURIComponent(newObjectKey);
     const signedUploadResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${encodedNewObjectKey}/signeds3upload`,
+      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
       {
         method: 'POST',
         headers: {
@@ -241,7 +240,7 @@ serve(async (req) => {
 
     // Step 3: Complete the upload
     const completeUploadResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${encodedNewObjectKey}/signeds3upload`,
+      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
       {
         method: 'POST',
         headers: {
