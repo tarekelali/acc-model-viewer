@@ -519,7 +519,7 @@ serve(async (req) => {
     
     // URL encode the object name to handle special characters like .rvt
     const encodedOssObject = encodeURIComponent(ossObject);
-    const ossDownloadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucket}/objects/${encodedOssObject}/signeds3download`;
+    const ossDownloadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${ossBucket}/objects/${encodedOssObject}/signeds3download?minutesExpiration=60`;
     console.log('[REVIT-MODIFY] Full download URL:', ossDownloadUrl);
     
     // Retry logic for eventual consistency
@@ -940,7 +940,7 @@ serve(async (req) => {
     let transformsSignedResponse;
     try {
       transformsSignedResponse = await fetch(
-        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${transformsKey}/signeds3download`,
+        `https://developer.api.autodesk.com/oss/v2/buckets/${bucketKeyTemp}/objects/${transformsKey}/signeds3download?minutesExpiration=60`,
         {
           method: 'GET',
           headers: {
