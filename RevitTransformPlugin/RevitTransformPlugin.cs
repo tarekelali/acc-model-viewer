@@ -39,10 +39,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB;
 using DesignAutomationFramework;
-using Newtonsoft.Json;
 
 namespace RevitTransformPlugin
 {
@@ -187,7 +188,8 @@ namespace RevitTransformPlugin
 
                 // Parse the JSON wrapper that contains the transforms dictionary
                 // Edge function sends: { "transforms": { "uniqueId": { "elementId": 123, "uniqueId": "...", "translation": {...} } } }
-                var wrapper = JsonConvert.DeserializeObject<TransformsWrapper>(json);
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var wrapper = JsonSerializer.Deserialize<TransformsWrapper>(json, options);
 
                 if (wrapper?.Transforms == null || wrapper.Transforms.Count == 0)
                 {
@@ -347,40 +349,40 @@ namespace RevitTransformPlugin
     // Format: { "transforms": { "uniqueId": { "elementId": 123, "uniqueId": "...", "translation": {...} } } }
     public class TransformsWrapper
     {
-        [JsonProperty("transforms")]
+        [JsonPropertyName("transforms")]
         public Dictionary<string, ElementTransformData> Transforms { get; set; }
     }
 
     public class ElementTransformData
     {
-        [JsonProperty("elementId")]
+        [JsonPropertyName("elementId")]
         public int ElementId { get; set; }
 
-        [JsonProperty("uniqueId")]
+        [JsonPropertyName("uniqueId")]
         public string UniqueId { get; set; }
 
-        [JsonProperty("elementName")]
+        [JsonPropertyName("elementName")]
         public string ElementName { get; set; }
 
-        [JsonProperty("originalPosition")]
+        [JsonPropertyName("originalPosition")]
         public Vector3 OriginalPosition { get; set; }
 
-        [JsonProperty("newPosition")]
+        [JsonPropertyName("newPosition")]
         public Vector3 NewPosition { get; set; }
 
-        [JsonProperty("translation")]
+        [JsonPropertyName("translation")]
         public Vector3 Translation { get; set; }
     }
 
     public class Vector3
     {
-        [JsonProperty("x")]
+        [JsonPropertyName("x")]
         public double X { get; set; }
 
-        [JsonProperty("y")]
+        [JsonPropertyName("y")]
         public double Y { get; set; }
 
-        [JsonProperty("z")]
+        [JsonPropertyName("z")]
         public double Z { get; set; }
     }
 }
