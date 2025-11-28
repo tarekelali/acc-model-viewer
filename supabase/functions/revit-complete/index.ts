@@ -192,34 +192,46 @@ serve(async (req) => {
     const newObjectKey = newObjectKeyParts.join('/');
 
     // Step 1: Request signed upload URL
+    const uploadUrl = `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`;
+    const uploadRequestBody = {
+      minutesExpiration: 30,
+      useCdn: false
+    };
+    
     console.log('[REVIT-COMPLETE] Requesting signed upload URL for bucket:', newBucketKey, 'object:', newObjectKey);
+    console.log('[REVIT-COMPLETE] Full upload URL:', uploadUrl);
+    console.log('[REVIT-COMPLETE] Request body:', JSON.stringify(uploadRequestBody));
+    
     const signedUploadResponse = await fetch(
-      `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
+      uploadUrl,
       {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${twoLeggedToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          minutesExpiration: 30,
-          useCdn: false
-        })
+        body: JSON.stringify(uploadRequestBody)
       }
     );
 
+    console.log('[REVIT-COMPLETE] Response status:', signedUploadResponse.status);
+    console.log('[REVIT-COMPLETE] Response headers:', Object.fromEntries(signedUploadResponse.headers.entries()));
+    
+    const responseText = await signedUploadResponse.text();
+    console.log('[REVIT-COMPLETE] Raw response:', responseText);
+
     if (!signedUploadResponse.ok) {
-      const errorText = await signedUploadResponse.text();
       return new Response(
         JSON.stringify({ 
           error: 'Failed to request signed upload URL',
-          details: errorText 
+          details: responseText 
         }),
         { status: signedUploadResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const signedUploadData = await signedUploadResponse.json();
+    const signedUploadData = JSON.parse(responseText);
+    console.log('[REVIT-COMPLETE] Parsed response - uploadKey:', signedUploadData.uploadKey, 'urls count:', signedUploadData.urls?.length);
     
     // Step 2: Upload to signed S3 URL
     const s3UploadResponse = await fetch(signedUploadData.urls[0], {
