@@ -280,7 +280,7 @@ serve(async (req) => {
         attributes: {
           name: itemData.data.attributes.displayName,
           extension: {
-            type: 'versions:autodesk.bim360:C4RModel',
+            type: 'versions:autodesk.bim360:C4RModelVersion',
             version: '1.0'
           }
         },
