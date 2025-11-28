@@ -422,7 +422,7 @@ serve(async (req) => {
           grant_type: 'client_credentials',
           client_id: ssaClientId,
           client_secret: ssaClientSecret,
-          scope: 'data:read data:write bucket:read',
+          scope: 'data:read data:write bucket:read bucket:create', // SSA needs bucket:create for temp bucket
         }),
       });
     } catch (e) {
