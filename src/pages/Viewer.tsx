@@ -39,6 +39,115 @@ interface Project {
 // Build version tracking
 const BUILD_VERSION = "v2.0.0-translation-fix";
 
+// Helper to download text as a file
+const downloadDebugReport = (content: string, filename: string) => {
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// Generate comprehensive debug report for sharing
+const generateDebugReport = (data: {
+  workItemId: string;
+  status: string;
+  statusData: any;
+  transformsSent: any;
+  error?: any;
+}) => {
+  const lines: string[] = [];
+  
+  lines.push('='.repeat(80));
+  lines.push('DESIGN AUTOMATION DEBUG REPORT');
+  lines.push('='.repeat(80));
+  lines.push(`Generated: ${new Date().toISOString()}`);
+  lines.push(`Build Version: ${BUILD_VERSION}`);
+  lines.push('');
+  
+  lines.push('-'.repeat(40));
+  lines.push('WORK ITEM INFO');
+  lines.push('-'.repeat(40));
+  lines.push(`WorkItem ID: ${data.workItemId}`);
+  lines.push(`Status: ${data.status}`);
+  lines.push('');
+  
+  lines.push('-'.repeat(40));
+  lines.push('TRANSFORMS SENT');
+  lines.push('-'.repeat(40));
+  lines.push(JSON.stringify(data.transformsSent, null, 2));
+  lines.push('');
+  
+  lines.push('-'.repeat(40));
+  lines.push('FULL STATUS DATA');
+  lines.push('-'.repeat(40));
+  lines.push(JSON.stringify(data.statusData, null, 2));
+  lines.push('');
+  
+  if (data.statusData?.reportContent) {
+    lines.push('-'.repeat(40));
+    lines.push('REPORT CONTENT (from Design Automation)');
+    lines.push('-'.repeat(40));
+    lines.push(data.statusData.reportContent);
+    lines.push('');
+  }
+  
+  if (data.statusData?.debugContent) {
+    lines.push('-'.repeat(40));
+    lines.push('DEBUG ZIP CONTENTS');
+    lines.push('-'.repeat(40));
+    
+    if (data.statusData.debugContent.allFiles) {
+      lines.push('\nAll files in debug ZIP:');
+      data.statusData.debugContent.allFiles.forEach((f: string) => lines.push(`  - ${f}`));
+    }
+    
+    if (data.statusData.debugContent.textFiles) {
+      lines.push('\n--- TEXT FILE CONTENTS ---');
+      data.statusData.debugContent.textFiles.forEach((file: any) => {
+        lines.push(`\n${'='.repeat(60)}`);
+        lines.push(`FILE: ${file.name} (${file.size} bytes)`);
+        lines.push('='.repeat(60));
+        lines.push(file.content);
+      });
+    }
+    
+    if (data.statusData.debugContent.journalFiles) {
+      lines.push('\n--- JOURNAL FILE CONTENTS ---');
+      data.statusData.debugContent.journalFiles.forEach((file: any) => {
+        lines.push(`\n${'='.repeat(60)}`);
+        lines.push(`JOURNAL: ${file.name} (${file.size} bytes)`);
+        lines.push('='.repeat(60));
+        lines.push(file.content);
+      });
+    }
+    
+    if (data.statusData.debugContent.otherFiles) {
+      lines.push('\n--- OTHER FILES (not extracted) ---');
+      data.statusData.debugContent.otherFiles.forEach((f: string) => lines.push(`  - ${f}`));
+    }
+  }
+  
+  if (data.error) {
+    lines.push('-'.repeat(40));
+    lines.push('ERROR DETAILS');
+    lines.push('-'.repeat(40));
+    lines.push(`Message: ${data.error.message || data.error}`);
+    lines.push(`Stack: ${data.error.stack || 'N/A'}`);
+  }
+  
+  lines.push('');
+  lines.push('='.repeat(80));
+  lines.push('END OF DEBUG REPORT');
+  lines.push('='.repeat(80));
+  
+  return lines.join('\n');
+};
+
 const Viewer = () => {
   // SECURITY: Whitelist - only allow this project
   const ALLOWED_PROJECT_ID = "d27a6383-5881-4756-9cff-3deccd318427";
@@ -1208,6 +1317,20 @@ const Viewer = () => {
             console.error('\n🔗 Click to open full report in browser:');
             console.error(statusData.reportUrl);
           }
+
+          // Generate and auto-download debug report
+          const debugReport = generateDebugReport({
+            workItemId,
+            status,
+            statusData,
+            transformsSent: transformsObject,
+            error: null
+          });
+          
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          downloadDebugReport(debugReport, `debug-report-${timestamp}.txt`);
+          console.log('\n📥 Debug report downloaded automatically as debug-report-' + timestamp + '.txt');
+          toast.info('Debug report downloaded');
 
           const errorMsg = statusData.reportContent
             ? `Design Automation failed. See full report above or at: ${statusData.reportUrl || 'N/A'}`
