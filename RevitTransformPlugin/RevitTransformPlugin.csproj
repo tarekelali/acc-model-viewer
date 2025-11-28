@@ -33,8 +33,5 @@
     <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2025.0.1">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
-      <ExcludeAssets>runtime</ExcludeAssets>
-    </PackageReference>
   </ItemGroup>
 </Project>
