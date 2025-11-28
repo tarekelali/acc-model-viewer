@@ -46,7 +46,7 @@ serve(async (req) => {
         grant_type: 'client_credentials',
         client_id: clientId,
         client_secret: clientSecret,
-        scope: 'data:read data:write data:create bucket:read',
+        scope: 'data:read data:write data:create code:all',
       }),
     });
 
@@ -192,6 +192,7 @@ serve(async (req) => {
     const newObjectKey = newObjectKeyParts.join('/');
 
     // Step 1: Request signed upload URL
+    console.log('[REVIT-COMPLETE] Requesting signed upload URL for bucket:', newBucketKey, 'object:', newObjectKey);
     const signedUploadResponse = await fetch(
       `https://developer.api.autodesk.com/oss/v2/buckets/${newBucketKey}/objects/${newObjectKey}/signeds3upload`,
       {
