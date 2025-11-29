@@ -8,44 +8,44 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 210 25% 8%;
-    --foreground: 0 0% 98%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 7%;
 
-    --card: 210 20% 12%;
-    --card-foreground: 0 0% 98%;
+    --card: 210 40% 96%;
+    --card-foreground: 0 0% 7%;
 
-    --popover: 210 20% 12%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
 
-    --primary: 197 100% 42%;
+    --primary: 209 100% 32%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 15% 18%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 51 100% 50%;
+    --secondary-foreground: 0 0% 7%;
 
-    --muted: 210 15% 18%;
-    --muted-foreground: 210 10% 60%;
+    --muted: 210 20% 90%;
+    --muted-foreground: 210 10% 40%;
 
-    --accent: 197 100% 42%;
+    --accent: 209 100% 32%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 15% 22%;
-    --input: 210 15% 22%;
-    --ring: 197 100% 42%;
+    --border: 210 20% 90%;
+    --input: 210 20% 90%;
+    --ring: 209 100% 32%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 210 25% 10%;
-    --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 197 100% 42%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 7%;
+    --sidebar-primary: 209 100% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 15% 18%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 210 15% 20%;
-    --sidebar-ring: 197 100% 42%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 0 0% 7%;
+    --sidebar-border: 210 20% 90%;
+    --sidebar-ring: 209 100% 32%;
   }
 }
 
