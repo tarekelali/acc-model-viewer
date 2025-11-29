@@ -787,6 +787,36 @@ const Viewer = () => {
         let dragPlaneNormal = new window.THREE.Vector3();
         let dragPlane = new window.THREE.Plane();
         
+        // Helper to construct proper ray for both perspective and orthographic cameras
+        const getRayFromMouse = (clientX: number, clientY: number) => {
+          const camera = viewer.impl.camera;
+          const rect = viewer.canvas.getBoundingClientRect();
+          
+          // Calculate normalized device coordinates (-1 to 1)
+          const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+          const y = -((clientY - rect.top) / rect.height) * 2 + 1;
+          
+          const pointerVector = new window.THREE.Vector3();
+          const pointerDir = new window.THREE.Vector3();
+          
+          if (camera.isPerspective) {
+            // Perspective camera
+            pointerVector.set(x, y, 0.5);
+            pointerVector.unproject(camera);
+            this.raycaster.set(
+              camera.position,
+              pointerVector.sub(camera.position).normalize()
+            );
+          } else {
+            // Orthographic camera
+            pointerVector.set(x, y, -1);
+            pointerVector.unproject(camera);
+            pointerDir.set(0, 0, -1);
+            pointerDir.transformDirection(camera.matrixWorld);
+            this.raycaster.set(pointerVector, pointerDir);
+          }
+        };
+        
         const highlightAxis = (axis: string | null) => {
           this.gizmoHandles.forEach(handle => {
             const isHighlighted = handle.group.userData.axis === axis;
@@ -809,10 +839,8 @@ const Viewer = () => {
         
         const onPointerMove = (event: PointerEvent) => {
           if (isDragging && dragAxis) {
-            // Get mouse ray using Forge Viewer's native ray calculation
-            const vpVec = viewer.impl.clientToViewport(event.clientX, event.clientY);
-            const ray = viewer.impl.viewportToRay(vpVec);
-            this.raycaster.set(ray.origin, ray.direction);
+            // Get mouse ray using manual unproject for overlay scene
+            getRayFromMouse(event.clientX, event.clientY);
             
             // Intersect with drag plane
             const intersection = new window.THREE.Vector3();
@@ -835,10 +863,8 @@ const Viewer = () => {
             
             event.stopPropagation();
           } else {
-            // Hover detection using Forge Viewer's native ray calculation
-            const vpVec = viewer.impl.clientToViewport(event.clientX, event.clientY);
-            const ray = viewer.impl.viewportToRay(vpVec);
-            this.raycaster.set(ray.origin, ray.direction);
+            // Hover detection using manual unproject for overlay scene
+            getRayFromMouse(event.clientX, event.clientY);
             
             // Check intersection with handles
             const intersects: any[] = [];
@@ -865,15 +891,15 @@ const Viewer = () => {
         const onPointerDown = (event: PointerEvent) => {
           if (event.button !== 0) return;
           
-          // Use Forge Viewer's native ray calculation
-          const vpVec = viewer.impl.clientToViewport(event.clientX, event.clientY);
-          const ray = viewer.impl.viewportToRay(vpVec);
-          this.raycaster.set(ray.origin, ray.direction);
+          // Use manual unproject for overlay scene
+          getRayFromMouse(event.clientX, event.clientY);
           
           // Check intersection with handles
+          console.log('🎯 Checking intersections with gizmoGroup:', this.gizmoGroup?.children?.length, 'children');
           const intersects: any[] = [];
           if (this.gizmoGroup) {
             const hits = this.raycaster.intersectObject(this.gizmoGroup, true);
+            console.log('🎯 Intersection hits:', hits.length, hits.length > 0 ? hits[0].object.userData : 'none');
             intersects.push(...hits);
           }
           
