@@ -662,8 +662,8 @@ const Viewer = () => {
           direction
         );
         
-        // Cone (arrowhead)
-        const coneGeometry = new window.THREE.ConeGeometry(coneRadius, coneHeight, 8);
+        // Cone (arrowhead) - Using CylinderGeometry with topRadius=0 for THREE.js r71 compatibility
+        const coneGeometry = new window.THREE.CylinderGeometry(0, coneRadius, coneHeight, 8);
         const coneMaterial = new window.THREE.MeshBasicMaterial({ color });
         const cone = new window.THREE.Mesh(coneGeometry, coneMaterial);
         cone.userData.axis = axis;
