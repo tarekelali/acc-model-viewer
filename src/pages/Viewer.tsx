@@ -685,7 +685,8 @@ const Viewer = () => {
         hitGeometry.computeBoundingSphere();
         const hitMaterial = new window.THREE.MeshBasicMaterial({
           transparent: true,
-          opacity: 0,
+          opacity: 0.15,  // Make slightly visible for debugging
+          color: color,   // Match axis color
           depthTest: false
         });
         const hitTarget = new window.THREE.Mesh(hitGeometry, hitMaterial);
@@ -756,9 +757,11 @@ const Viewer = () => {
             this.gizmoGroup.add(zHandle.group);
             this.gizmoHandles.push(zHandle);
             
-            // Use sceneAfter instead of overlay for proper raycasting
-            // (overlay scene has different coordinate system that breaks raycasting)
-            viewer.impl.sceneAfter.add(this.gizmoGroup);
+            // Create overlay scene if it doesn't exist
+            if (!viewer.impl.overlayScenes['transform-gizmo']) {
+              viewer.impl.createOverlayScene('transform-gizmo');
+            }
+            viewer.impl.addOverlay('transform-gizmo', this.gizmoGroup);
           } else {
             this.gizmoGroup.position.copy(center);
           }
@@ -899,10 +902,25 @@ const Viewer = () => {
           // Use manual unproject for overlay scene
           getRayFromMouse(event.clientX, event.clientY);
           
-          // Ensure matrices are updated for raycasting
+          // Ensure matrices are updated for raycasting - traverse all children
           if (this.gizmoGroup) {
-            this.gizmoGroup.updateMatrixWorld(true);
+            this.gizmoGroup.traverse((child: any) => {
+              child.updateMatrix();
+              child.updateMatrixWorld(true);
+            });
           }
+          
+          // Debug: Log ray and gizmo positions
+          console.log('🔍 Ray origin:', this.raycaster.ray.origin.toArray());
+          console.log('🔍 Ray direction:', this.raycaster.ray.direction.toArray());
+          console.log('🔍 Gizmo world position:', this.gizmoGroup?.position?.toArray());
+          
+          // Log each handle's world position
+          this.gizmoHandles.forEach((handle, i) => {
+            const worldPos = new window.THREE.Vector3();
+            handle.hitTarget.getWorldPosition(worldPos);
+            console.log(`🔍 Handle ${i} (${handle.group.userData.axis}) world pos:`, worldPos.toArray());
+          });
           
           // Check intersection with handles
           console.log('🎯 Checking intersections with gizmoGroup:', this.gizmoGroup?.children?.length, 'children');
@@ -1042,8 +1060,7 @@ const Viewer = () => {
 
       removeGizmo() {
         if (this.gizmoGroup) {
-          // Remove from sceneAfter (matching the add location)
-          this.viewer.impl.sceneAfter.remove(this.gizmoGroup);
+          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoGroup);
           this.gizmoGroup = null;
           this.gizmoHandles = [];
         }
