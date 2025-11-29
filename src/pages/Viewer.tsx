@@ -1428,26 +1428,35 @@ const Viewer = () => {
         throw new Error(startResult.message || startResult.error || 'Failed to start Design Automation job');
       }
 
-      const { workItemId, bucketKeyTemp, outputObjectKey } = startResult;
+      const { workItemId, bucketKeyTemp, outputObjectKey, twoLeggedToken } = startResult;
       console.log('✓ WorkItem created:', workItemId);
       console.log(`✓ Submitted ${Object.keys(transformsObject).length} transform(s) to Design Automation`);
       toast.success(`Processing ${Object.keys(transformsObject).length} transform(s)...`);
 
-      // STEP 2: Poll for status
+      // STEP 2: Poll for status with adaptive intervals
       let attempts = 0;
       const maxAttempts = 60; // 10 minutes max
-      const pollInterval = 10000; // 10 seconds
+      
+      // Adaptive polling: faster initially, slower after 30 seconds
+      const getPollingInterval = (attempt: number) => {
+        if (attempt < 6) return 5000;  // First 30s: every 5s
+        return 10000;  // After: every 10s
+      };
 
       toast('Processing... (this may take 2-5 minutes)');
 
       while (attempts < maxAttempts) {
+        const pollInterval = getPollingInterval(attempts);
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         attempts++;
 
         const statusResponse = await fetch(`${baseUrl}/revit-status`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ workItemId }),
+          body: JSON.stringify({ 
+            workItemId,
+            cachedToken: twoLeggedToken  // Pass cached token to avoid refetching
+          }),
         });
 
         if (!statusResponse.ok) {
@@ -1463,7 +1472,12 @@ const Viewer = () => {
           console.log('Progress:', statusData.progress);
         }
 
-        toast(`Processing... (${attempts * 10}s elapsed, status: ${status})`);
+        // Calculate elapsed time based on adaptive polling
+        const elapsedSeconds = attempts <= 6 
+          ? attempts * 5  // First 6 attempts: 5s each
+          : 30 + (attempts - 6) * 10;  // After: 30s base + 10s per additional attempt
+        
+        toast(`Processing... (${elapsedSeconds}s elapsed, status: ${status})`);
 
         if (status === 'success') {
           console.log('\n✓ Design Automation processing completed successfully!');
