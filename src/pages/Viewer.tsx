@@ -655,6 +655,7 @@ const Viewer = () => {
           color,
           side: window.THREE.DoubleSide 
         });
+        shaftMaterial.supportsMrtNormals = true;  // Required for Forge's MRT rendering
         const shaft = new window.THREE.Mesh(shaftGeometry, shaftMaterial);
         shaft.userData.axis = axis;
         shaft.userData.originalColor = color;
@@ -673,6 +674,7 @@ const Viewer = () => {
           color,
           side: window.THREE.DoubleSide 
         });
+        coneMaterial.supportsMrtNormals = true;  // Required for Forge's MRT rendering
         const cone = new window.THREE.Mesh(coneGeometry, coneMaterial);
         cone.userData.axis = axis;
         cone.userData.originalColor = color;
@@ -686,7 +688,7 @@ const Viewer = () => {
         
         // Invisible hit target (larger for easier clicking)
         const hitGeometry = new window.THREE.CylinderGeometry(
-          0.2, 0.2, shaftLength + coneHeight, 8
+          0.4, 0.4, shaftLength + coneHeight + 0.4, 8  // Increased radius from 0.2 to 0.4
         );
         hitGeometry.computeBoundingSphere();
         const hitMaterial = new window.THREE.MeshBasicMaterial({
@@ -695,6 +697,7 @@ const Viewer = () => {
           color: color,
           side: window.THREE.DoubleSide  // Ensure hits from both sides
         });
+        hitMaterial.supportsMrtNormals = true;  // Required for Forge's MRT rendering
         const hitTarget = new window.THREE.Mesh(hitGeometry, hitMaterial);
         hitTarget.userData.axis = axis;
         hitTarget.userData.originalColor = color;
@@ -921,11 +924,20 @@ const Viewer = () => {
           console.log('🔍 Ray direction:', this.raycaster.ray.direction.x.toFixed(2), this.raycaster.ray.direction.y.toFixed(2), this.raycaster.ray.direction.z.toFixed(2));
           console.log('🔍 Gizmo world position:', this.gizmoGroup?.position?.x?.toFixed(2), this.gizmoGroup?.position?.y?.toFixed(2), this.gizmoGroup?.position?.z?.toFixed(2));
           
-          // Log each handle's world position
+          // Log each handle's world position and distance from ray
           this.gizmoHandles.forEach((handle, i) => {
             const worldPos = new window.THREE.Vector3();
             handle.hitTarget.getWorldPosition(worldPos);
-            console.log(`🔍 Handle ${i} (${handle.group.userData.axis}) world pos: ${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}`);
+            
+            // Calculate distance from ray to handle center
+            const rayToHandle = new window.THREE.Vector3().subVectors(worldPos, this.raycaster.ray.origin);
+            const projection = rayToHandle.dot(this.raycaster.ray.direction);
+            const closestPoint = this.raycaster.ray.origin.clone().add(
+              this.raycaster.ray.direction.clone().multiplyScalar(projection)
+            );
+            const distance = closestPoint.distanceTo(worldPos);
+            
+            console.log(`🔍 Handle ${i} (${handle.group.userData.axis}) world pos: ${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)} | Ray distance: ${distance.toFixed(2)}`);
           });
           
           // Check intersection with handles
