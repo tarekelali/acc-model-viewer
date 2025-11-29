@@ -600,12 +600,42 @@ serve(async (req) => {
 
     console.log('[REVIT-MODIFY] ✅ Got signed download URL, downloading file...');
 
-    // ========== STEP 3.5: USE PERMANENT OUTPUT BUCKET ==========
-    console.log('[STEP 3.5] Using permanent output bucket...');
-    
+    // ========== STEP 3.5: CREATE OR USE OUTPUT BUCKET ==========
+    console.log('[STEP 3.5] Creating/verifying output bucket...');
+
     const bucketKeyTemp = 'revit-transform-output';
-    console.log('[STEP 3.5] Bucket key:', bucketKeyTemp);
-    console.log('[STEP 3.5] ✓ Using existing permanent bucket (no creation needed)');
+
+    // Create bucket if it doesn't exist (transient = auto-delete after 24h)
+    const createBucketResponse = await fetch(
+      'https://developer.api.autodesk.com/oss/v2/buckets',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${ssaToken}`,
+          'Content-Type': 'application/json',
+          'x-ads-region': 'US'
+        },
+        body: JSON.stringify({
+          bucketKey: bucketKeyTemp,
+          policyKey: 'transient'
+        })
+      }
+    );
+
+    // 409 = bucket already exists (which is fine)
+    if (!createBucketResponse.ok && createBucketResponse.status !== 409) {
+      const errorText = await createBucketResponse.text();
+      console.error('[STEP 3.5] ❌ Failed to create bucket:', errorText);
+      return createErrorResponse(
+        ErrorType.API_ERROR,
+        'Failed to create output bucket',
+        'Create Bucket',
+        createBucketResponse.status,
+        { response: errorText }
+      );
+    }
+
+    console.log('[STEP 3.5] ✓ Output bucket ready:', bucketKeyTemp);
 
     // ========== STEP 4: DESIGN AUTOMATION CONFIGURATION ==========
     console.log('[STEP 4] Using Design Automation configuration...');
