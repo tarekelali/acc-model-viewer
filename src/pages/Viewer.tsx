@@ -651,7 +651,10 @@ const Viewer = () => {
           shaftRadius, shaftRadius, shaftLength, 8
         );
         shaftGeometry.computeBoundingSphere();
-        const shaftMaterial = new window.THREE.MeshBasicMaterial({ color });
+        const shaftMaterial = new window.THREE.MeshBasicMaterial({ 
+          color,
+          side: window.THREE.DoubleSide 
+        });
         const shaft = new window.THREE.Mesh(shaftGeometry, shaftMaterial);
         shaft.userData.axis = axis;
         shaft.userData.originalColor = color;
@@ -666,7 +669,10 @@ const Viewer = () => {
         // Cone (arrowhead) - Using CylinderGeometry with topRadius=0 for THREE.js r71 compatibility
         const coneGeometry = new window.THREE.CylinderGeometry(0, coneRadius, coneHeight, 8);
         coneGeometry.computeBoundingSphere();
-        const coneMaterial = new window.THREE.MeshBasicMaterial({ color });
+        const coneMaterial = new window.THREE.MeshBasicMaterial({ 
+          color,
+          side: window.THREE.DoubleSide 
+        });
         const cone = new window.THREE.Mesh(coneGeometry, coneMaterial);
         cone.userData.axis = axis;
         cone.userData.originalColor = color;
@@ -685,9 +691,9 @@ const Viewer = () => {
         hitGeometry.computeBoundingSphere();
         const hitMaterial = new window.THREE.MeshBasicMaterial({
           transparent: true,
-          opacity: 0.15,  // Make slightly visible for debugging
-          color: color,   // Match axis color
-          depthTest: false
+          opacity: 0.2,    // Slightly more visible for debugging
+          color: color,
+          side: window.THREE.DoubleSide  // Ensure hits from both sides
         });
         const hitTarget = new window.THREE.Mesh(hitGeometry, hitMaterial);
         hitTarget.userData.axis = axis;
@@ -757,11 +763,9 @@ const Viewer = () => {
             this.gizmoGroup.add(zHandle.group);
             this.gizmoHandles.push(zHandle);
             
-            // Create overlay scene if it doesn't exist
-            if (!viewer.impl.overlayScenes['transform-gizmo']) {
-              viewer.impl.createOverlayScene('transform-gizmo');
-            }
-            viewer.impl.addOverlay('transform-gizmo', this.gizmoGroup);
+            // Use sceneAfter for proper raycasting
+            // (overlay scenes have different coordinate systems that break raycasting)
+            viewer.impl.sceneAfter.add(this.gizmoGroup);
           } else {
             this.gizmoGroup.position.copy(center);
           }
@@ -909,17 +913,19 @@ const Viewer = () => {
               child.updateMatrixWorld(true);
             });
           }
+          // Also update the sceneAfter
+          viewer.impl.sceneAfter.updateMatrixWorld(true);
           
-          // Debug: Log ray and gizmo positions
-          console.log('🔍 Ray origin:', this.raycaster.ray.origin.toArray());
-          console.log('🔍 Ray direction:', this.raycaster.ray.direction.toArray());
-          console.log('🔍 Gizmo world position:', this.gizmoGroup?.position?.toArray());
+          // Debug: Log ray and gizmo positions with actual values
+          console.log('🔍 Ray origin:', this.raycaster.ray.origin.x.toFixed(2), this.raycaster.ray.origin.y.toFixed(2), this.raycaster.ray.origin.z.toFixed(2));
+          console.log('🔍 Ray direction:', this.raycaster.ray.direction.x.toFixed(2), this.raycaster.ray.direction.y.toFixed(2), this.raycaster.ray.direction.z.toFixed(2));
+          console.log('🔍 Gizmo world position:', this.gizmoGroup?.position?.x?.toFixed(2), this.gizmoGroup?.position?.y?.toFixed(2), this.gizmoGroup?.position?.z?.toFixed(2));
           
           // Log each handle's world position
           this.gizmoHandles.forEach((handle, i) => {
             const worldPos = new window.THREE.Vector3();
             handle.hitTarget.getWorldPosition(worldPos);
-            console.log(`🔍 Handle ${i} (${handle.group.userData.axis}) world pos:`, worldPos.toArray());
+            console.log(`🔍 Handle ${i} (${handle.group.userData.axis}) world pos: ${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}`);
           });
           
           // Check intersection with handles
@@ -1060,7 +1066,8 @@ const Viewer = () => {
 
       removeGizmo() {
         if (this.gizmoGroup) {
-          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoGroup);
+          // Remove from sceneAfter (matching the add location)
+          this.viewer.impl.sceneAfter.remove(this.gizmoGroup);
           this.gizmoGroup = null;
           this.gizmoHandles = [];
         }
