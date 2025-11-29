@@ -14,9 +14,20 @@ const Index = () => {
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           {/* Left: IKEA Logo + App Name */}
           <div className="flex items-center gap-3">
-            {/* IKEA Logo */}
-            <svg viewBox="0 0 88 36" className="h-9 w-auto fill-[hsl(51,100%,50%)]">
-              <path d="M33.6,0.9h7.4v33.7h-7.4V0.9z M9.8,0.9h7.4v14.8l12-14.8h9.6L24.2,17.2l15.8,17.4h-10L17.2,18.9v15.7H9.8V0.9z M77.3,0.9h10.2L73.8,34.6H63.6L50.1,0.9h10.1l7.3,20.4L77.3,0.9z M0,0.9h7.4v33.7H0V0.9z M77.3,0.9h10.2L73.8,34.6H63.6L50.1,0.9h10.1l7.3,20.4L77.3,0.9z" />
+            {/* IKEA Logo - Blue oval with yellow IKEA text */}
+            <svg viewBox="0 0 88 36" className="h-10 w-auto">
+              <ellipse cx="44" cy="18" rx="42" ry="16" fill="#0058a3" />
+              <text 
+                x="44" 
+                y="24" 
+                fill="#ffdb00" 
+                fontSize="18" 
+                fontWeight="bold" 
+                fontFamily="Noto Sans, sans-serif"
+                textAnchor="middle"
+              >
+                IKEA
+              </text>
             </svg>
             <span className="text-lg font-semibold text-primary-foreground">M&CP Configurator</span>
           </div>
@@ -84,7 +95,7 @@ const Index = () => {
       {/* Minimal Footer */}
       <footer className="bg-background border-t border-border py-6">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          Powered by IKEA Digital Solutions
+          Powered by IKEA Merchandise & Commercial Planning Team
         </div>
       </footer>
     </div>
