@@ -693,9 +693,9 @@ const Viewer = () => {
         hitGeometry.computeBoundingSphere();
         const hitMaterial = new window.THREE.MeshBasicMaterial({
           transparent: true,
-          opacity: 0.2,    // Slightly more visible for debugging
+          opacity: 0,
           color: color,
-          side: window.THREE.DoubleSide  // Ensure hits from both sides
+          side: window.THREE.DoubleSide
         });
         viewer.impl.matman().addMaterial(`gizmo-hit-${axis}`, hitMaterial, true);
         const hitTarget = new window.THREE.Mesh(hitGeometry, hitMaterial);
@@ -922,33 +922,10 @@ const Viewer = () => {
           // Also update the sceneAfter
           viewer.impl.sceneAfter.updateMatrixWorld(true);
           
-          // Debug: Log ray and gizmo positions with actual values
-          console.log('🔍 Ray origin:', this.raycaster.ray.origin.x.toFixed(2), this.raycaster.ray.origin.y.toFixed(2), this.raycaster.ray.origin.z.toFixed(2));
-          console.log('🔍 Ray direction:', this.raycaster.ray.direction.x.toFixed(2), this.raycaster.ray.direction.y.toFixed(2), this.raycaster.ray.direction.z.toFixed(2));
-          console.log('🔍 Gizmo world position:', this.gizmoGroup?.position?.x?.toFixed(2), this.gizmoGroup?.position?.y?.toFixed(2), this.gizmoGroup?.position?.z?.toFixed(2));
-          
-          // Log each handle's world position and distance from ray
-          this.gizmoHandles.forEach((handle, i) => {
-            const worldPos = new window.THREE.Vector3();
-            handle.hitTarget.getWorldPosition(worldPos);
-            
-            // Calculate distance from ray to handle center
-            const rayToHandle = new window.THREE.Vector3().subVectors(worldPos, this.raycaster.ray.origin);
-            const projection = rayToHandle.dot(this.raycaster.ray.direction);
-            const closestPoint = this.raycaster.ray.origin.clone().add(
-              this.raycaster.ray.direction.clone().multiplyScalar(projection)
-            );
-            const distance = closestPoint.distanceTo(worldPos);
-            
-            console.log(`🔍 Handle ${i} (${handle.group.userData.axis}) world pos: ${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)} | Ray distance: ${distance.toFixed(2)}`);
-          });
-          
           // Check intersection with handles
-          console.log('🎯 Checking intersections with gizmoGroup:', this.gizmoGroup?.children?.length, 'children');
           const intersects: any[] = [];
           if (this.gizmoGroup) {
             const hits = this.raycaster.intersectObject(this.gizmoGroup, true);
-            console.log('🎯 Intersection hits:', hits.length, hits.length > 0 ? hits[0].object.userData : 'none');
             intersects.push(...hits);
           }
           
