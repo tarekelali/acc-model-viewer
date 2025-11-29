@@ -337,7 +337,7 @@ serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${twoLeggedToken}`,  // Use SSA token for version creation
           'Content-Type': 'application/vnd.api+json'
         },
         body: JSON.stringify(versionPayload)
