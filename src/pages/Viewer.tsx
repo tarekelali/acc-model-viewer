@@ -539,11 +539,13 @@ const Viewer = () => {
       constructor(viewer: any, options: any) {
         super(viewer, options);
         this.selectedDbId = null;
-        this.gizmoArrows = null;
+        this.gizmoGroup = null;
+        this.gizmoHandles = [];
         this.originalPosition = null;
         this.accumulatedOffset = new window.THREE.Vector3(0, 0, 0);
         this.raycaster = new window.THREE.Raycaster();
         this.keyboardHandler = null;
+        this.hoveredAxis = null;
       }
 
       load() {
@@ -572,7 +574,7 @@ const Viewer = () => {
           document.removeEventListener('keydown', this.keyboardHandler);
         }
         
-        if (this.gizmoArrows) {
+        if (this.gizmoGroup) {
           this.removeGizmo();
         }
         
@@ -634,6 +636,73 @@ const Viewer = () => {
         }
       }
 
+      createAxisHandle(axis: string, color: number, direction: any) {
+        const shaftRadius = 0.05;
+        const shaftLength = 2.0;
+        const coneRadius = 0.15;
+        const coneHeight = 0.4;
+        
+        // Create group for this axis
+        const group = new window.THREE.Group();
+        group.userData.axis = axis;
+        
+        // Shaft (thick cylinder)
+        const shaftGeometry = new window.THREE.CylinderGeometry(
+          shaftRadius, shaftRadius, shaftLength, 8
+        );
+        const shaftMaterial = new window.THREE.MeshBasicMaterial({ color });
+        const shaft = new window.THREE.Mesh(shaftGeometry, shaftMaterial);
+        shaft.userData.axis = axis;
+        shaft.userData.originalColor = color;
+        
+        // Position shaft along the axis
+        shaft.position.copy(direction.clone().multiplyScalar(shaftLength / 2));
+        shaft.quaternion.setFromUnitVectors(
+          new window.THREE.Vector3(0, 1, 0),
+          direction
+        );
+        
+        // Cone (arrowhead)
+        const coneGeometry = new window.THREE.ConeGeometry(coneRadius, coneHeight, 8);
+        const coneMaterial = new window.THREE.MeshBasicMaterial({ color });
+        const cone = new window.THREE.Mesh(coneGeometry, coneMaterial);
+        cone.userData.axis = axis;
+        cone.userData.originalColor = color;
+        
+        // Position cone at end of shaft
+        cone.position.copy(direction.clone().multiplyScalar(shaftLength + coneHeight / 2));
+        cone.quaternion.setFromUnitVectors(
+          new window.THREE.Vector3(0, 1, 0),
+          direction
+        );
+        
+        // Invisible hit target (larger for easier clicking)
+        const hitGeometry = new window.THREE.CylinderGeometry(
+          0.2, 0.2, shaftLength + coneHeight, 8
+        );
+        const hitMaterial = new window.THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0,
+          depthTest: false
+        });
+        const hitTarget = new window.THREE.Mesh(hitGeometry, hitMaterial);
+        hitTarget.userData.axis = axis;
+        hitTarget.userData.originalColor = color;
+        hitTarget.userData.isHitTarget = true;
+        
+        hitTarget.position.copy(direction.clone().multiplyScalar((shaftLength + coneHeight) / 2));
+        hitTarget.quaternion.setFromUnitVectors(
+          new window.THREE.Vector3(0, 1, 0),
+          direction
+        );
+        
+        group.add(shaft);
+        group.add(cone);
+        group.add(hitTarget);
+        
+        return { group, shaft, cone, hitTarget };
+      }
+
       showGizmo(dbId: number) {
         const viewer = this.viewer;
         const model = viewer.model;
@@ -651,50 +720,42 @@ const Viewer = () => {
           // Store original position
           this.originalPosition = { x: center.x, y: center.y, z: center.z };
           
-          // Create arrow gizmos for X, Y, Z axes
-          if (!this.gizmoArrows) {
-            const arrowLength = 2;
-            const arrowHeadLength = 0.4;
-            const arrowHeadWidth = 0.3;
+          // Create gizmo group with custom handles
+          if (!this.gizmoGroup) {
+            this.gizmoGroup = new window.THREE.Group();
+            this.gizmoGroup.position.copy(center);
+            this.gizmoHandles = [];
             
             // X axis (red)
-            const xArrow = new window.THREE.ArrowHelper(
-              new window.THREE.Vector3(1, 0, 0),
-              center,
-              arrowLength,
+            const xHandle = this.createAxisHandle(
+              'x',
               0xff0000,
-              arrowHeadLength,
-              arrowHeadWidth
+              new window.THREE.Vector3(1, 0, 0)
             );
-            xArrow.userData.axis = 'x';
+            this.gizmoGroup.add(xHandle.group);
+            this.gizmoHandles.push(xHandle);
             
             // Y axis (green)
-            const yArrow = new window.THREE.ArrowHelper(
-              new window.THREE.Vector3(0, 1, 0),
-              center,
-              arrowLength,
+            const yHandle = this.createAxisHandle(
+              'y',
               0x00ff00,
-              arrowHeadLength,
-              arrowHeadWidth
+              new window.THREE.Vector3(0, 1, 0)
             );
-            yArrow.userData.axis = 'y';
+            this.gizmoGroup.add(yHandle.group);
+            this.gizmoHandles.push(yHandle);
             
             // Z axis (blue)
-            const zArrow = new window.THREE.ArrowHelper(
-              new window.THREE.Vector3(0, 0, 1),
-              center,
-              arrowLength,
+            const zHandle = this.createAxisHandle(
+              'z',
               0x0000ff,
-              arrowHeadLength,
-              arrowHeadWidth
+              new window.THREE.Vector3(0, 0, 1)
             );
-            zArrow.userData.axis = 'z';
+            this.gizmoGroup.add(zHandle.group);
+            this.gizmoHandles.push(zHandle);
             
-            this.gizmoArrows = { x: xArrow, y: yArrow, z: zArrow };
-            
-            viewer.impl.addOverlay('transform-gizmo', xArrow);
-            viewer.impl.addOverlay('transform-gizmo', yArrow);
-            viewer.impl.addOverlay('transform-gizmo', zArrow);
+            viewer.impl.addOverlay('transform-gizmo', this.gizmoGroup);
+          } else {
+            this.gizmoGroup.position.copy(center);
           }
           
           viewer.impl.invalidate(true);
@@ -705,7 +766,7 @@ const Viewer = () => {
       }
 
       updateGizmoPosition() {
-        if (!this.gizmoArrows || !this.originalPosition) return;
+        if (!this.gizmoGroup || !this.originalPosition) return;
         
         const newPos = new window.THREE.Vector3(
           this.originalPosition.x + this.accumulatedOffset.x,
@@ -713,9 +774,7 @@ const Viewer = () => {
           this.originalPosition.z + this.accumulatedOffset.z
         );
         
-        this.gizmoArrows.x.position.copy(newPos);
-        this.gizmoArrows.y.position.copy(newPos);
-        this.gizmoArrows.z.position.copy(newPos);
+        this.gizmoGroup.position.copy(newPos);
         
         this.viewer.impl.invalidate(true);
       }
@@ -724,12 +783,96 @@ const Viewer = () => {
         const viewer = this.viewer;
         let isDragging = false;
         let dragAxis: string | null = null;
-        let startScreenPoint = { x: 0, y: 0 };
+        let dragStartPoint = new window.THREE.Vector3();
+        let dragPlaneNormal = new window.THREE.Vector3();
+        let dragPlane = new window.THREE.Plane();
         
-        const onMouseDown = (event: MouseEvent) => {
+        const highlightAxis = (axis: string | null) => {
+          this.gizmoHandles.forEach(handle => {
+            const isHighlighted = handle.group.userData.axis === axis;
+            const color = isHighlighted ? 0xffff00 : handle.shaft.userData.originalColor;
+            handle.shaft.material.color.setHex(color);
+            handle.cone.material.color.setHex(color);
+          });
+          this.hoveredAxis = axis;
+          viewer.impl.invalidate(true);
+        };
+        
+        const getAxisDirection = (axis: string) => {
+          switch(axis) {
+            case 'x': return new window.THREE.Vector3(1, 0, 0);
+            case 'y': return new window.THREE.Vector3(0, 1, 0);
+            case 'z': return new window.THREE.Vector3(0, 0, 1);
+            default: return new window.THREE.Vector3(0, 0, 0);
+          }
+        };
+        
+        const onPointerMove = (event: PointerEvent) => {
+          if (isDragging && dragAxis) {
+            // Get mouse ray
+            const camera = viewer.navigation.getCamera();
+            const mouse = new window.THREE.Vector2(
+              (event.clientX / viewer.canvas.clientWidth) * 2 - 1,
+              -(event.clientY / viewer.canvas.clientHeight) * 2 + 1
+            );
+            
+            this.raycaster.setFromCamera(mouse, camera);
+            
+            // Intersect with drag plane
+            const intersection = new window.THREE.Vector3();
+            this.raycaster.ray.intersectPlane(dragPlane, intersection);
+            
+            if (intersection) {
+              // Project to axis
+              const axisDir = getAxisDirection(dragAxis);
+              const delta = intersection.clone().sub(dragStartPoint);
+              const projection = delta.dot(axisDir);
+              
+              // Update offset along the axis
+              const offset = axisDir.clone().multiplyScalar(projection);
+              this.accumulatedOffset.copy(offset);
+              
+              // Move fragment and update gizmo
+              this.moveFragment(dbId, this.accumulatedOffset);
+              this.updateGizmoPosition();
+            }
+            
+            event.stopPropagation();
+          } else {
+            // Hover detection
+            const camera = viewer.navigation.getCamera();
+            const mouse = new window.THREE.Vector2(
+              (event.clientX / viewer.canvas.clientWidth) * 2 - 1,
+              -(event.clientY / viewer.canvas.clientHeight) * 2 + 1
+            );
+            
+            this.raycaster.setFromCamera(mouse, camera);
+            
+            // Check intersection with handles
+            const intersects: any[] = [];
+            if (this.gizmoGroup) {
+              const hits = this.raycaster.intersectObject(this.gizmoGroup, true);
+              intersects.push(...hits);
+            }
+            
+            if (intersects.length > 0) {
+              const hitAxis = intersects[0].object.userData.axis;
+              if (hitAxis !== this.hoveredAxis) {
+                highlightAxis(hitAxis);
+                viewer.canvas.style.cursor = 'grab';
+              }
+            } else {
+              if (this.hoveredAxis !== null) {
+                highlightAxis(null);
+                viewer.canvas.style.cursor = 'default';
+              }
+            }
+          }
+        };
+        
+        const onPointerDown = (event: PointerEvent) => {
           if (event.button !== 0) return;
           
-          // Test if we clicked on any of the arrow handles
           const camera = viewer.navigation.getCamera();
           const mouse = new window.THREE.Vector2(
             (event.clientX / viewer.canvas.clientWidth) * 2 - 1,
@@ -738,66 +881,42 @@ const Viewer = () => {
           
           this.raycaster.setFromCamera(mouse, camera);
           
-          // Check intersection with arrow handles
+          // Check intersection with handles
           const intersects: any[] = [];
-          if (this.gizmoArrows) {
-            Object.values(this.gizmoArrows).forEach((arrow: any) => {
-              const hits = this.raycaster.intersectObject(arrow, true);
-              hits.forEach(hit => {
-                hit.object.userData.axis = arrow.userData.axis;
-                intersects.push(hit);
-              });
-            });
+          if (this.gizmoGroup) {
+            const hits = this.raycaster.intersectObject(this.gizmoGroup, true);
+            intersects.push(...hits);
           }
           
           if (intersects.length > 0) {
             isDragging = true;
             dragAxis = intersects[0].object.userData.axis;
-            startScreenPoint = { x: event.clientX, y: event.clientY };
+            
+            // Setup drag plane perpendicular to camera and containing axis
+            const axisDir = getAxisDirection(dragAxis);
+            const cameraDir = camera.getWorldDirection(new window.THREE.Vector3());
+            dragPlaneNormal.crossVectors(axisDir, cameraDir).normalize();
+            dragPlaneNormal.crossVectors(dragPlaneNormal, axisDir).normalize();
+            
+            const gizmoPos = this.gizmoGroup.position.clone();
+            dragPlane.setFromNormalAndCoplanarPoint(dragPlaneNormal, gizmoPos);
+            
+            // Get start point on plane
+            this.raycaster.ray.intersectPlane(dragPlane, dragStartPoint);
+            
             viewer.impl.controls.setIsLocked(true);
+            viewer.canvas.style.cursor = 'grabbing';
             event.stopPropagation();
           }
         };
 
-        const onMouseMove = (event: MouseEvent) => {
-          if (!isDragging || !dragAxis) return;
-          
-          // Calculate screen movement
-          const deltaX = event.clientX - startScreenPoint.x;
-          const deltaY = event.clientY - startScreenPoint.y;
-          
-          // Convert screen delta to world delta along the selected axis
-          const sensitivity = 0.01;
-          let offset = new window.THREE.Vector3(0, 0, 0);
-          
-          switch(dragAxis) {
-            case 'x':
-              offset.x = deltaX * sensitivity;
-              break;
-            case 'y':
-              offset.y = -deltaY * sensitivity;
-              break;
-            case 'z':
-              offset.z = -deltaY * sensitivity;
-              break;
-          }
-          
-          // Update accumulated offset
-          this.accumulatedOffset.copy(offset);
-          
-          // Move fragment and update gizmo
-          this.moveFragment(dbId, this.accumulatedOffset);
-          this.updateGizmoPosition();
-          
-          event.stopPropagation();
-        };
-
-        const onMouseUp = (event: MouseEvent) => {
+        const onPointerUp = (event: PointerEvent) => {
           if (!isDragging) return;
           
           isDragging = false;
           dragAxis = null;
           viewer.impl.controls.setIsLocked(false);
+          viewer.canvas.style.cursor = this.hoveredAxis ? 'grab' : 'default';
           
           // Record the change
           if (this.originalPosition && this.accumulatedOffset.length() > 0) {
@@ -864,15 +983,17 @@ const Viewer = () => {
           event.stopPropagation();
         };
 
-        viewer.canvas.addEventListener('mousedown', onMouseDown);
-        viewer.canvas.addEventListener('mousemove', onMouseMove);
-        viewer.canvas.addEventListener('mouseup', onMouseUp);
+        viewer.canvas.addEventListener('pointermove', onPointerMove);
+        viewer.canvas.addEventListener('pointerdown', onPointerDown);
+        viewer.canvas.addEventListener('pointerup', onPointerUp);
         
         // Store cleanup
         this.dragCleanup = () => {
-          viewer.canvas.removeEventListener('mousedown', onMouseDown);
-          viewer.canvas.removeEventListener('mousemove', onMouseMove);
-          viewer.canvas.removeEventListener('mouseup', onMouseUp);
+          viewer.canvas.removeEventListener('pointermove', onPointerMove);
+          viewer.canvas.removeEventListener('pointerdown', onPointerDown);
+          viewer.canvas.removeEventListener('pointerup', onPointerUp);
+          viewer.canvas.style.cursor = 'default';
+          highlightAxis(null);
         };
       }
 
@@ -894,11 +1015,10 @@ const Viewer = () => {
       }
 
       removeGizmo() {
-        if (this.gizmoArrows) {
-          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoArrows.x);
-          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoArrows.y);
-          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoArrows.z);
-          this.gizmoArrows = null;
+        if (this.gizmoGroup) {
+          this.viewer.impl.removeOverlay('transform-gizmo', this.gizmoGroup);
+          this.gizmoGroup = null;
+          this.gizmoHandles = [];
         }
         
         if (this.dragCleanup) {
@@ -907,6 +1027,7 @@ const Viewer = () => {
         
         this.originalPosition = null;
         this.accumulatedOffset.set(0, 0, 0);
+        this.hoveredAxis = null;
       }
     }
 
