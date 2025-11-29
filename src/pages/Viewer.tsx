@@ -809,14 +809,10 @@ const Viewer = () => {
         
         const onPointerMove = (event: PointerEvent) => {
           if (isDragging && dragAxis) {
-            // Get mouse ray
-            const camera = viewer.navigation.getCamera();
-            const mouse = new window.THREE.Vector2(
-              (event.clientX / viewer.canvas.clientWidth) * 2 - 1,
-              -(event.clientY / viewer.canvas.clientHeight) * 2 + 1
-            );
-            
-            this.raycaster.setFromCamera(mouse, camera);
+            // Get mouse ray using Forge Viewer's native ray calculation
+            const vpVec = viewer.impl.clientToViewport(event.clientX, event.clientY);
+            const ray = viewer.impl.viewportToRay(vpVec);
+            this.raycaster.set(ray.origin, ray.direction);
             
             // Intersect with drag plane
             const intersection = new window.THREE.Vector3();
@@ -839,14 +835,10 @@ const Viewer = () => {
             
             event.stopPropagation();
           } else {
-            // Hover detection
-            const camera = viewer.navigation.getCamera();
-            const mouse = new window.THREE.Vector2(
-              (event.clientX / viewer.canvas.clientWidth) * 2 - 1,
-              -(event.clientY / viewer.canvas.clientHeight) * 2 + 1
-            );
-            
-            this.raycaster.setFromCamera(mouse, camera);
+            // Hover detection using Forge Viewer's native ray calculation
+            const vpVec = viewer.impl.clientToViewport(event.clientX, event.clientY);
+            const ray = viewer.impl.viewportToRay(vpVec);
+            this.raycaster.set(ray.origin, ray.direction);
             
             // Check intersection with handles
             const intersects: any[] = [];
@@ -873,13 +865,10 @@ const Viewer = () => {
         const onPointerDown = (event: PointerEvent) => {
           if (event.button !== 0) return;
           
-          const camera = viewer.navigation.getCamera();
-          const mouse = new window.THREE.Vector2(
-            (event.clientX / viewer.canvas.clientWidth) * 2 - 1,
-            -(event.clientY / viewer.canvas.clientHeight) * 2 + 1
-          );
-          
-          this.raycaster.setFromCamera(mouse, camera);
+          // Use Forge Viewer's native ray calculation
+          const vpVec = viewer.impl.clientToViewport(event.clientX, event.clientY);
+          const ray = viewer.impl.viewportToRay(vpVec);
+          this.raycaster.set(ray.origin, ray.direction);
           
           // Check intersection with handles
           const intersects: any[] = [];
@@ -893,6 +882,7 @@ const Viewer = () => {
             dragAxis = intersects[0].object.userData.axis;
             
             // Setup drag plane perpendicular to camera and containing axis
+            const camera = viewer.navigation.getCamera();
             const axisDir = getAxisDirection(dragAxis);
             const cameraDir = camera.getWorldDirection(new window.THREE.Vector3());
             dragPlaneNormal.crossVectors(axisDir, cameraDir).normalize();
