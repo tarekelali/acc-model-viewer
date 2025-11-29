@@ -636,7 +636,7 @@ const Viewer = () => {
         }
       }
 
-      createAxisHandle(axis: string, color: number, direction: any) {
+      createAxisHandle(viewer: any, axis: string, color: number, direction: any) {
         const shaftRadius = 0.05;
         const shaftLength = 2.0;
         const coneRadius = 0.15;
@@ -655,7 +655,7 @@ const Viewer = () => {
           color,
           side: window.THREE.DoubleSide 
         });
-        shaftMaterial.supportsMrtNormals = true;  // Required for Forge's MRT rendering
+        viewer.impl.matman().addMaterial(`gizmo-shaft-${axis}`, shaftMaterial, true);
         const shaft = new window.THREE.Mesh(shaftGeometry, shaftMaterial);
         shaft.userData.axis = axis;
         shaft.userData.originalColor = color;
@@ -674,7 +674,7 @@ const Viewer = () => {
           color,
           side: window.THREE.DoubleSide 
         });
-        coneMaterial.supportsMrtNormals = true;  // Required for Forge's MRT rendering
+        viewer.impl.matman().addMaterial(`gizmo-cone-${axis}`, coneMaterial, true);
         const cone = new window.THREE.Mesh(coneGeometry, coneMaterial);
         cone.userData.axis = axis;
         cone.userData.originalColor = color;
@@ -688,7 +688,7 @@ const Viewer = () => {
         
         // Invisible hit target (larger for easier clicking)
         const hitGeometry = new window.THREE.CylinderGeometry(
-          0.4, 0.4, shaftLength + coneHeight + 0.4, 8  // Increased radius from 0.2 to 0.4
+          0.8, 0.8, shaftLength + coneHeight + 0.5, 8  // Increased radius from 0.4 to 0.8
         );
         hitGeometry.computeBoundingSphere();
         const hitMaterial = new window.THREE.MeshBasicMaterial({
@@ -697,7 +697,7 @@ const Viewer = () => {
           color: color,
           side: window.THREE.DoubleSide  // Ensure hits from both sides
         });
-        hitMaterial.supportsMrtNormals = true;  // Required for Forge's MRT rendering
+        viewer.impl.matman().addMaterial(`gizmo-hit-${axis}`, hitMaterial, true);
         const hitTarget = new window.THREE.Mesh(hitGeometry, hitMaterial);
         hitTarget.userData.axis = axis;
         hitTarget.userData.originalColor = color;
@@ -741,6 +741,7 @@ const Viewer = () => {
             
             // X axis (red)
             const xHandle = this.createAxisHandle(
+              viewer,
               'x',
               0xff0000,
               new window.THREE.Vector3(1, 0, 0)
@@ -750,6 +751,7 @@ const Viewer = () => {
             
             // Y axis (green)
             const yHandle = this.createAxisHandle(
+              viewer,
               'y',
               0x00ff00,
               new window.THREE.Vector3(0, 1, 0)
@@ -759,6 +761,7 @@ const Viewer = () => {
             
             // Z axis (blue)
             const zHandle = this.createAxisHandle(
+              viewer,
               'z',
               0x0000ff,
               new window.THREE.Vector3(0, 0, 1)
@@ -947,6 +950,36 @@ const Viewer = () => {
             const hits = this.raycaster.intersectObject(this.gizmoGroup, true);
             console.log('🎯 Intersection hits:', hits.length, hits.length > 0 ? hits[0].object.userData : 'none');
             intersects.push(...hits);
+          }
+          
+          // Fallback: Distance-based hit detection if standard raycasting found nothing
+          if (intersects.length === 0 && this.gizmoGroup) {
+            const HIT_THRESHOLD = 1.0;  // Distance threshold for hit
+            let closestAxis = null;
+            let closestDistance = HIT_THRESHOLD;
+            
+            this.gizmoHandles.forEach((handle) => {
+              const worldPos = new window.THREE.Vector3();
+              handle.hitTarget.getWorldPosition(worldPos);
+              
+              // Calculate perpendicular distance from ray to handle center
+              const rayToHandle = new window.THREE.Vector3().subVectors(worldPos, this.raycaster.ray.origin);
+              const projection = rayToHandle.dot(this.raycaster.ray.direction);
+              const closestPoint = this.raycaster.ray.origin.clone().add(
+                this.raycaster.ray.direction.clone().multiplyScalar(projection)
+              );
+              const distance = closestPoint.distanceTo(worldPos);
+              
+              if (distance < closestDistance && projection > 0) {  // Only consider points in front of camera
+                closestDistance = distance;
+                closestAxis = handle.group.userData.axis;
+              }
+            });
+            
+            if (closestAxis) {
+              console.log(`🎯 Fallback hit detection: axis ${closestAxis} at distance ${closestDistance.toFixed(2)}`);
+              intersects.push({ object: { userData: { axis: closestAxis } } });
+            }
           }
           
           if (intersects.length > 0) {
