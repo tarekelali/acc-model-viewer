@@ -301,13 +301,19 @@ serve(async (req) => {
     // ========== STEP 11: CREATE NEW VERSION ==========
     console.log('[REVIT-COMPLETE] Creating new version in ACC...');
     
+    // Use a generic File extension that doesn't require C4RModel whitelisting
+    const genericExtension = {
+      type: 'versions:autodesk.bim360:File',
+      version: '1.0'
+    };
+    
     const versionPayload = {
       jsonapi: { version: '1.0' },
       data: {
         type: 'versions',
         attributes: {
           name: itemData.data.attributes.displayName,
-          extension: originalExtension  // Use the original extension to match MIME type
+          extension: genericExtension  // Use generic File extension instead of C4RModel
         },
         relationships: {
           item: {
