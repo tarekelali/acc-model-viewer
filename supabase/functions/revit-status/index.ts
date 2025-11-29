@@ -14,7 +14,7 @@ serve(async (req) => {
   console.log('[REVIT-STATUS] Request received at', new Date().toISOString());
 
   try {
-    const { workItemId } = await req.json();
+    const { workItemId, cachedToken } = await req.json();
 
     if (!workItemId) {
       return new Response(
@@ -24,39 +24,46 @@ serve(async (req) => {
     }
 
     console.log('[REVIT-STATUS] Checking status for WorkItem:', workItemId);
+    console.log('[REVIT-STATUS] Using cached token:', !!cachedToken);
 
-    // Get 2-legged token for Design Automation API
-    const clientId = 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
-    const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
+    // Use cached token if provided, otherwise fetch a new one
+    let token = cachedToken;
+    
+    if (!token) {
+      console.log('[REVIT-STATUS] No cached token, fetching new token...');
+      
+      const clientId = 'UonGGAilCryEuzl6kCD2owAcIiFZXobglVyZamHkTktJg2AY';
+      const clientSecret = Deno.env.get('AUTODESK_CLIENT_SECRET');
 
-    if (!clientSecret) {
-      return new Response(
-        JSON.stringify({ error: 'AUTODESK_CLIENT_SECRET not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (!clientSecret) {
+        return new Response(
+          JSON.stringify({ error: 'AUTODESK_CLIENT_SECRET not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const tokenResponse = await fetch('https://developer.api.autodesk.com/authentication/v2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: clientId,
+          client_secret: clientSecret,
+          scope: 'code:all',
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        const error = await tokenResponse.text();
+        return new Response(
+          JSON.stringify({ error: 'Failed to get token', details: error }),
+          { status: tokenResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const tokenData = await tokenResponse.json();
+      token = tokenData.access_token;
     }
-
-    const tokenResponse = await fetch('https://developer.api.autodesk.com/authentication/v2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
-        scope: 'code:all',
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      const error = await tokenResponse.text();
-      return new Response(
-        JSON.stringify({ error: 'Failed to get token', details: error }),
-        { status: tokenResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const tokenData = await tokenResponse.json();
-    const token = tokenData.access_token;
 
     // Query WorkItem status
     const statusResponse = await fetch(

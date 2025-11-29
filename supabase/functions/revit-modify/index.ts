@@ -355,26 +355,41 @@ serve(async (req) => {
       );
     }
 
-    console.log('[STEP 0] Getting 2-legged token for Design Automation API...');
+    console.log('[STEP 0] Getting 2-legged tokens (regular + SSA) in parallel...');
     
-    let tokenResponse;
+    let tokenResponse, ssaTokenResponse;
     try {
-      tokenResponse = await fetch('https://developer.api.autodesk.com/authentication/v2/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          grant_type: 'client_credentials',
-          client_id: clientId,
-          client_secret: clientSecret,
-          scope: 'code:all bucket:create bucket:read data:read data:write',
+      // Fetch both tokens in parallel for faster execution
+      [tokenResponse, ssaTokenResponse] = await Promise.all([
+        fetch('https://developer.api.autodesk.com/authentication/v2/token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            grant_type: 'client_credentials',
+            client_id: clientId,
+            client_secret: clientSecret,
+            scope: 'code:all bucket:create bucket:read data:read data:write',
+          }),
         }),
-      });
+        fetch('https://developer.api.autodesk.com/authentication/v2/token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            grant_type: 'client_credentials',
+            client_id: ssaClientId,
+            client_secret: ssaClientSecret,
+            scope: 'data:read data:write bucket:read bucket:create',
+          }),
+        })
+      ]);
     } catch (e) {
       return createErrorResponse(
         ErrorType.AUTH_ERROR,
-        'Network error while fetching 2-legged token',
+        'Network error while fetching tokens',
         'Token Acquisition',
         500,
         { error: e instanceof Error ? e.message : String(e) }
@@ -392,49 +407,6 @@ serve(async (req) => {
       );
     }
 
-    const tokenData = await tokenResponse.json();
-    const twoLeggedToken = tokenData.access_token;
-    
-    if (!twoLeggedToken) {
-      return createErrorResponse(
-        ErrorType.AUTH_ERROR,
-        'No access token in authentication response',
-        'Token Acquisition',
-        500,
-        { tokenData }
-      );
-    }
-
-    console.log('[STEP 0] ✓ 2-legged token acquired successfully');
-    console.log('[REVIT-MODIFY] ✅ Regular token:', twoLeggedToken.substring(0, 20) + '...');
-
-    // ========== STEP 0B: GET SSA TOKEN FOR OSS DOWNLOAD ==========
-    console.log('[STEP 0B] Getting SSA 2-legged token for OSS file download...');
-    
-    let ssaTokenResponse;
-    try {
-      ssaTokenResponse = await fetch('https://developer.api.autodesk.com/authentication/v2/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          grant_type: 'client_credentials',
-          client_id: ssaClientId,
-          client_secret: ssaClientSecret,
-          scope: 'data:read data:write bucket:read bucket:create', // SSA needs bucket:create for temp bucket
-        }),
-      });
-    } catch (e) {
-      return createErrorResponse(
-        ErrorType.AUTH_ERROR,
-        'Network error while fetching SSA token',
-        'SSA Token Acquisition',
-        500,
-        { error: e instanceof Error ? e.message : String(e) }
-      );
-    }
-
     if (!ssaTokenResponse.ok) {
       const error = await ssaTokenResponse.text();
       return createErrorResponse(
@@ -446,9 +418,22 @@ serve(async (req) => {
       );
     }
 
+    const tokenData = await tokenResponse.json();
+    const twoLeggedToken = tokenData.access_token;
+    
     const ssaTokenData = await ssaTokenResponse.json();
     const ssaToken = ssaTokenData.access_token;
     
+    if (!twoLeggedToken) {
+      return createErrorResponse(
+        ErrorType.AUTH_ERROR,
+        'No access token in authentication response',
+        'Token Acquisition',
+        500,
+        { tokenData }
+      );
+    }
+
     if (!ssaToken) {
       return createErrorResponse(
         ErrorType.AUTH_ERROR,
@@ -459,7 +444,8 @@ serve(async (req) => {
       );
     }
 
-    console.log('[STEP 0B] ✓ SSA token acquired successfully');
+    console.log('[STEP 0] ✓ Both tokens acquired successfully (parallel fetch)');
+    console.log('[REVIT-MODIFY] ✅ Regular token:', twoLeggedToken.substring(0, 20) + '...');
     console.log('[REVIT-MODIFY] ✅ SSA token:', ssaToken.substring(0, 20) + '...');
 
     // ========== STEP 1: GET ITEM DETAILS ==========
@@ -614,53 +600,15 @@ serve(async (req) => {
 
     console.log('[REVIT-MODIFY] ✅ Got signed download URL, downloading file...');
 
-    // ========== STEP 3.5: CREATE TEMP BUCKET FOR OUTPUT ==========
-    console.log('[STEP 3.5] Creating temporary bucket for output file...');
+    // ========== STEP 3.5: USE PERMANENT OUTPUT BUCKET ==========
+    console.log('[STEP 3.5] Using permanent output bucket...');
     
-    const bucketKeyTemp = `revit_temp_${Date.now()}`;
+    const bucketKeyTemp = 'revit-transform-output';
     console.log('[STEP 3.5] Bucket key:', bucketKeyTemp);
-    let createBucketResponse;
-    try {
-      createBucketResponse = await fetch(
-        'https://developer.api.autodesk.com/oss/v2/buckets',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${ssaToken}`, // SSA app owns temp bucket
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            bucketKey: bucketKeyTemp,
-            policyKey: 'transient'
-          })
-        }
-      );
-    } catch (e) {
-      return createErrorResponse(
-        ErrorType.API_ERROR,
-        'Network error while creating temp bucket',
-        'Create Temp Bucket',
-        500,
-        { error: e instanceof Error ? e.message : String(e) }
-      );
-    }
+    console.log('[STEP 3.5] ✓ Using existing permanent bucket (no creation needed)');
 
-    // Bucket may already exist, which is fine (409 status)
-    if (!createBucketResponse.ok && createBucketResponse.status !== 409) {
-      const errorText = await createBucketResponse.text();
-      return createErrorResponse(
-        ErrorType.API_ERROR,
-        'Failed to create temp bucket',
-        'Create Temp Bucket',
-        createBucketResponse.status,
-        { response: errorText }
-      );
-    }
-
-    console.log('[STEP 3.5] ✓ Temp bucket ready for output');
-
-    // ========== STEP 4: VERIFY DESIGN AUTOMATION CONFIGURATION ==========
-    console.log('[STEP 4] Verifying Design Automation configuration...');
+    // ========== STEP 4: DESIGN AUTOMATION CONFIGURATION ==========
+    console.log('[STEP 4] Using Design Automation configuration...');
     
     // CRITICAL: Use the actual deployed Activity/AppBundle IDs from Cursor deployment
     const appBundleAlias = `${clientId}.RevitTransformAppV2+1`;
@@ -672,42 +620,7 @@ serve(async (req) => {
       timestamp: new Date().toISOString()
     });
 
-    // Verify Activity exists and get its details
-    console.log('[STEP 4] Verifying Activity exists and is configured correctly...');
-    
-    let activityCheckResponse;
-    try {
-      activityCheckResponse = await fetch(
-        `https://developer.api.autodesk.com/da/us-east/v3/activities/${activityAlias}`,
-        { headers: { 'Authorization': `Bearer ${twoLeggedToken}` } }
-      );
-    } catch (e) {
-      console.warn('[STEP 4] Could not verify Activity (network error):', e instanceof Error ? e.message : String(e));
-    }
-
-    if (activityCheckResponse && activityCheckResponse.ok) {
-      const activityDetails = await activityCheckResponse.json();
-      console.log('[STEP 4] Activity details:', {
-        id: activityDetails.id,
-        version: activityDetails.version,
-        appBundles: activityDetails.appbundles,
-        engine: activityDetails.engine,
-        commandLine: activityDetails.commandLine
-      });
-      
-      // Log the AppBundle reference to verify it's correct
-      if (activityDetails.appbundles && activityDetails.appbundles.length > 0) {
-        console.log('[STEP 4] Activity is using AppBundle(s):', activityDetails.appbundles);
-      } else {
-        console.warn('[STEP 4] WARNING: Activity has no AppBundles configured!');
-      }
-    } else if (activityCheckResponse) {
-      const errorText = await activityCheckResponse.text();
-      console.warn('[STEP 4] WARNING: Could not verify Activity:', activityCheckResponse.status, errorText);
-      console.warn('[STEP 4] This may cause WorkItem creation to fail if Activity does not exist');
-    }
-
-    console.log('[STEP 4] ✓ Design Automation configuration verified');
+    console.log('[STEP 4] ✓ Design Automation configuration ready');
 
     // ========== STEP 5: GET OUTPUT FILE SIGNED URL ==========
     console.log('[STEP 5] Getting signed URL for output file...');
@@ -1104,6 +1017,7 @@ serve(async (req) => {
         workItemId,
         bucketKeyTemp,
         outputObjectKey,
+        twoLeggedToken,  // Pass token back to frontend for status polling
         status: 'pending',
         message: 'WorkItem created successfully. Poll /revit-status for updates.',
         elapsedMs: elapsed
