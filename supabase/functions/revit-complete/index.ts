@@ -298,30 +298,58 @@ serve(async (req) => {
 
     console.log('[REVIT-COMPLETE] Modified file uploaded to ACC storage');
 
-    // ========== STEP 11: CREATE NEW VERSION ==========
-    console.log('[REVIT-COMPLETE] Creating new version in ACC...');
+    // ========== STEP 11: CREATE NEW ITEM (instead of version) ==========
+    console.log('[REVIT-COMPLETE] Creating new item in ACC...');
     
-    // Use a generic File extension that doesn't require C4RModel whitelisting
-    const genericExtension = {
-      type: 'versions:autodesk.bim360:File',
-      version: '1.0'
-    };
+    // Generate a modified filename
+    const originalName = itemData.data.attributes.displayName;
+    const baseName = originalName.replace(/\.rvt$/i, '');
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+    const newFileName = `${baseName}_modified_${timestamp}.rvt`;
     
-    const versionPayload = {
+    console.log('[REVIT-COMPLETE] New file name:', newFileName);
+
+    // Get parent folder ID from item data
+    const parentFolderId = itemData.data.relationships.parent.data.id;
+
+    // Create new item payload
+    const itemPayload = {
       jsonapi: { version: '1.0' },
       data: {
-        type: 'versions',
+        type: 'items',
         attributes: {
-          name: itemData.data.attributes.displayName,
-          extension: genericExtension  // Use generic File extension instead of C4RModel
+          displayName: newFileName,
+          extension: {
+            type: 'items:autodesk.bim360:File',
+            version: '1.0'
+          }
         },
         relationships: {
-          item: {
+          tip: {
             data: {
-              type: 'items',
-              id: itemId
+              type: 'versions',
+              id: '1'
             }
           },
+          parent: {
+            data: {
+              type: 'folders',
+              id: parentFolderId
+            }
+          }
+        }
+      },
+      included: [{
+        type: 'versions',
+        id: '1',
+        attributes: {
+          name: newFileName,
+          extension: {
+            type: 'versions:autodesk.bim360:File',
+            version: '1.0'
+          }
+        },
+        relationships: {
           storage: {
             data: {
               type: 'objects',
@@ -329,43 +357,44 @@ serve(async (req) => {
             }
           }
         }
-      }
+      }]
     };
 
-    const newVersionResponse = await fetch(
-      `https://developer.api.autodesk.com/data/v1/projects/b.${projectId}/versions`,
+    const newItemResponse = await fetch(
+      `https://developer.api.autodesk.com/data/v1/projects/b.${projectId}/items`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${twoLeggedToken}`,  // Use SSA token for version creation
+          'Authorization': `Bearer ${twoLeggedToken}`,
           'Content-Type': 'application/vnd.api+json'
         },
-        body: JSON.stringify(versionPayload)
+        body: JSON.stringify(itemPayload)
       }
     );
 
-    if (!newVersionResponse.ok) {
-      const errorText = await newVersionResponse.text();
+    if (!newItemResponse.ok) {
+      const errorText = await newItemResponse.text();
       return new Response(
         JSON.stringify({ 
-          error: 'Failed to create new version in ACC',
+          error: 'Failed to create new item in ACC',
           details: errorText 
         }),
-        { status: newVersionResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: newItemResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const newVersion = await newVersionResponse.json();
-    const versionId = newVersion.data.id;
+    const newItem = await newItemResponse.json();
+    const newItemId = newItem.data.id;
 
-    console.log('[REVIT-COMPLETE] New version created:', versionId);
+    console.log('[REVIT-COMPLETE] New item created:', newItemId);
 
     return new Response(
       JSON.stringify({
         success: true,
-        versionId,
+        itemId: newItemId,
+        fileName: newFileName,
         uploadedSize: modifiedFile.size,
-        message: 'File processing completed successfully'
+        message: 'File processing completed successfully. New file created in ACC.'
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
